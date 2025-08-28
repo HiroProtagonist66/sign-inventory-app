@@ -15,10 +15,11 @@ interface InventoryDashboardProps {
 }
 
 export default function InventoryDashboard({ userRole }: InventoryDashboardProps) {
+  console.log('InventoryDashboard: Component mounting, userRole:', userRole)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState({
-    start: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
+    start: format(subDays(new Date(), 365), 'yyyy-MM-dd'), // Go back 1 year instead of 30 days
     end: format(new Date(), 'yyyy-MM-dd')
   })
   const [selectedSite, setSelectedSite] = useState<string>('all')
@@ -30,17 +31,21 @@ export default function InventoryDashboard({ userRole }: InventoryDashboardProps
 
   const loadDashboardData = async () => {
     try {
+      console.log('InventoryDashboard: Starting to load dashboard data...')
       setLoading(true)
-      const dashboardData = await getDashboardData({
+      const filters = {
         startDate: startOfDay(new Date(dateRange.start)),
         endDate: endOfDay(new Date(dateRange.end)),
         siteId: selectedSite === 'all' ? undefined : selectedSite,
         areaId: selectedArea === 'all' ? undefined : selectedArea
-      })
+      }
+      console.log('InventoryDashboard: Calling getDashboardData with filters:', filters)
+      const dashboardData = await getDashboardData(filters)
+      console.log('InventoryDashboard: Dashboard data received:', dashboardData)
       setData(dashboardData)
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
-      toast.error('Failed to load dashboard data')
+      console.error('InventoryDashboard: Error loading dashboard data:', error)
+      toast.error(`Failed to load dashboard data: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
