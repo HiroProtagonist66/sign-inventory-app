@@ -51,11 +51,15 @@ export interface DashboardData {
 
 export async function getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
   try {
+    console.log('Dashboard filters:', filters)
+    
     // Get all sites for filter dropdown
     const { data: sites } = await supabase
       .from('sites')
       .select('id, name')
       .order('name')
+      
+    console.log('Sites found:', sites?.length || 0)
 
     // First get relevant sessions based on filters
     let sessionsQuery = supabase
@@ -73,8 +77,11 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
 
     const { data: sessions } = await sessionsQuery
 
+    console.log('Sessions found:', sessions?.length || 0, sessions)
+
     // Get inventory logs for these sessions
     const sessionIds = sessions?.map(s => s.id) || []
+    console.log('Session IDs:', sessionIds)
     interface InventoryLog {
       id: string
       session_id: string
@@ -92,6 +99,14 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
         .in('session_id', sessionIds)
       
       inventoryLogs = data || []
+      console.log('Inventory logs found:', inventoryLogs.length, inventoryLogs)
+    } else {
+      console.log('No sessions found, checking all inventory logs for debugging...')
+      const { data: allLogs } = await supabase
+        .from('inventory_log')
+        .select('*')
+        .limit(5)
+      console.log('Sample inventory logs:', allLogs)
     }
 
     // Get total signs count

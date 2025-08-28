@@ -35,6 +35,7 @@ export default function ProjectSelection() {
       
       console.log('Profile data:', profileData)
       console.log('Sites data:', sitesData)
+      console.log('User role for dashboard button:', profileData?.role)
       
       setUserProfile(profileData)
       setSites(sitesData)
@@ -82,7 +83,7 @@ export default function ProjectSelection() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              {(userProfile?.role === 'manager' || userProfile?.role === 'project_manager') && (
+              {userProfile && (userProfile.role === 'manager' || userProfile.role === 'project_manager') && (
                 <button
                   onClick={handleInventoryDashboard}
                   className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
