@@ -2,28 +2,34 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getSites, Site } from '@/lib/supabase'
+import { getAssignedSites, getCurrentUserProfile, Site, UserProfile } from '@/lib/supabase'
 import { useOnlineStatus } from '@/lib/offline-storage'
-import { Building2, Wifi, WifiOff } from 'lucide-react'
+import { Building2, Wifi, WifiOff, Settings } from 'lucide-react'
 import AuthGuard from '@/components/AuthGuard'
 import toast from 'react-hot-toast'
 
 export default function ProjectSelection() {
   const [sites, setSites] = useState<Site[]>([])
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
   useEffect(() => {
-    loadSites()
+    loadData()
   }, [])
 
-  async function loadSites() {
+  async function loadData() {
     try {
-      const data = await getSites()
-      setSites(data)
+      const [profileData, sitesData] = await Promise.all([
+        getCurrentUserProfile(),
+        getAssignedSites()
+      ])
+      
+      setUserProfile(profileData)
+      setSites(sitesData)
     } catch (error) {
-      console.error('Error loading sites:', error)
+      console.error('Error loading data:', error)
       toast.error('Failed to load projects')
     } finally {
       setLoading(false)
@@ -33,6 +39,10 @@ export default function ProjectSelection() {
   function handleSiteSelect(site: Site) {
     sessionStorage.setItem('selectedSite', JSON.stringify(site))
     router.push('/areas')
+  }
+
+  function handleManagerDashboard() {
+    router.push('/manager')
   }
 
   if (loading) {
@@ -49,16 +59,34 @@ export default function ProjectSelection() {
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-md mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-gray-900">Select Project</h1>
-            <div className="flex items-center gap-2">
-              {isOnline ? (
-                <Wifi className="h-5 w-5 text-green-500" />
-              ) : (
-                <WifiOff className="h-5 w-5 text-red-500" />
+            <div>
+              <h1 className="text-xl font-semibold text-gray-900">Select Project</h1>
+              {userProfile && (
+                <p className="text-sm text-gray-600 capitalize">
+                  {userProfile.role} • {userProfile.full_name || userProfile.email}
+                </p>
               )}
-              <span className="text-sm text-gray-500">
-                {isOnline ? 'Online' : 'Offline'}
-              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              {userProfile?.role === 'manager' && (
+                <button
+                  onClick={handleManagerDashboard}
+                  className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                  title="Manager Dashboard"
+                >
+                  <Settings className="h-5 w-5" />
+                </button>
+              )}
+              <div className="flex items-center gap-2">
+                {isOnline ? (
+                  <Wifi className="h-5 w-5 text-green-500" />
+                ) : (
+                  <WifiOff className="h-5 w-5 text-red-500" />
+                )}
+                <span className="text-sm text-gray-500">
+                  {isOnline ? 'Online' : 'Offline'}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -69,7 +97,20 @@ export default function ProjectSelection() {
           <div className="text-center py-12">
             <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Projects Found</h3>
-            <p className="text-gray-500">No projects are available at this time.</p>
+            <p className="text-gray-500">
+              {userProfile?.role === 'installer' 
+                ? 'No projects have been assigned to you yet. Please contact your manager.'
+                : 'No projects are available at this time.'
+              }
+            </p>
+            {userProfile?.role === 'manager' && (
+              <button
+                onClick={handleManagerDashboard}
+                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+              >
+                Go to Manager Dashboard
+              </button>
+            )}
           </div>
         ) : (
           <div className="space-y-3">

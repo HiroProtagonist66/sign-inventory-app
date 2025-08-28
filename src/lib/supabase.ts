@@ -207,3 +207,151 @@ export async function createInventoryLogRecords(records: Omit<InventoryLogRecord
   }
   return data as InventoryLogRecord[]
 }
+
+// User Profiles and Roles
+export interface UserProfile {
+  id: string
+  email: string
+  full_name: string | null
+  role: 'manager' | 'installer'
+  created_at: string
+  updated_at: string
+}
+
+export interface UserSiteAssignment {
+  id: string
+  user_id: string
+  site_id: string
+  assigned_by: string
+  assigned_at: string
+  user_profiles?: UserProfile
+  sites?: Site
+}
+
+export async function getCurrentUserProfile(): Promise<UserProfile | null> {
+  const { data: userData } = await supabase.auth.getUser()
+  if (!userData?.user) return null
+
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .eq('id', userData.user.id)
+    .single()
+
+  if (error) {
+    console.error('Error fetching user profile:', error)
+    return null
+  }
+  return data as UserProfile
+}
+
+export async function getAllUsers(): Promise<UserProfile[]> {
+  const { data, error } = await supabase
+    .from('user_profiles')
+    .select('*')
+    .order('created_at')
+
+  if (error) {
+    console.error('Error fetching users:', error)
+    throw new Error(`Failed to fetch users: ${error.message}`)
+  }
+  return data as UserProfile[]
+}
+
+export async function updateUserRole(userId: string, role: 'manager' | 'installer'): Promise<void> {
+  const { error } = await supabase
+    .from('user_profiles')
+    .update({ role, updated_at: new Date().toISOString() })
+    .eq('id', userId)
+
+  if (error) {
+    console.error('Error updating user role:', error)
+    throw new Error(`Failed to update user role: ${error.message}`)
+  }
+}
+
+export async function assignUserToSite(userId: string, siteId: string): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser()
+  const assignedBy = userData?.user?.id
+
+  if (!assignedBy) {
+    throw new Error('Must be logged in to assign users')
+  }
+
+  const { error } = await supabase
+    .from('user_site_assignments')
+    .insert({
+      user_id: userId,
+      site_id: siteId,
+      assigned_by: assignedBy
+    })
+
+  if (error) {
+    console.error('Error assigning user to site:', error)
+    throw new Error(`Failed to assign user to site: ${error.message}`)
+  }
+}
+
+export async function removeUserFromSite(userId: string, siteId: string): Promise<void> {
+  const { error } = await supabase
+    .from('user_site_assignments')
+    .delete()
+    .eq('user_id', userId)
+    .eq('site_id', siteId)
+
+  if (error) {
+    console.error('Error removing user from site:', error)
+    throw new Error(`Failed to remove user from site: ${error.message}`)
+  }
+}
+
+export async function getUserSiteAssignments(userId?: string): Promise<UserSiteAssignment[]> {
+  let query = supabase
+    .from('user_site_assignments')
+    .select(`
+      *,
+      user_profiles (id, email, full_name, role),
+      sites (id, name, location)
+    `)
+
+  if (userId) {
+    query = query.eq('user_id', userId)
+  }
+
+  const { data, error } = await query.order('assigned_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching user site assignments:', error)
+    throw new Error(`Failed to fetch assignments: ${error.message}`)
+  }
+  return data as UserSiteAssignment[]
+}
+
+export async function getAssignedSites(): Promise<Site[]> {
+  const { data: userData } = await supabase.auth.getUser()
+  if (!userData?.user) return []
+
+  // Get user profile to check role
+  const userProfile = await getCurrentUserProfile()
+  if (!userProfile) return []
+
+  // If user is manager, return all sites
+  if (userProfile.role === 'manager') {
+    return getSites()
+  }
+
+  // If installer, return only assigned sites
+  const { data, error } = await supabase
+    .from('user_site_assignments')
+    .select(`
+      sites (*)
+    `)
+    .eq('user_id', userData.user.id)
+
+  if (error) {
+    console.error('Error fetching assigned sites:', error)
+    throw new Error(`Failed to fetch assigned sites: ${error.message}`)
+  }
+
+  return (data?.map(item => item.sites).filter(Boolean) || []) as Site[]
+}
