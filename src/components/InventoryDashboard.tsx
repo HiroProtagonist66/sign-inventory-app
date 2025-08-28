@@ -19,15 +19,16 @@ export default function InventoryDashboard({ userRole }: InventoryDashboardProps
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [dateRange, setDateRange] = useState({
-    start: format(subDays(new Date(), 365), 'yyyy-MM-dd'), // Go back 1 year instead of 30 days
+    start: format(subDays(new Date(), 30), 'yyyy-MM-dd'), // Back to 30 days since we confirmed data loads
     end: format(new Date(), 'yyyy-MM-dd')
   })
   const [selectedSite, setSelectedSite] = useState<string>('all')
   const [selectedArea, setSelectedArea] = useState<string>('all')
+  const [selectedSignType, setSelectedSignType] = useState<string>('all')
 
   useEffect(() => {
     loadDashboardData()
-  }, [dateRange, selectedSite, selectedArea])
+  }, [dateRange, selectedSite, selectedArea, selectedSignType])
 
   const loadDashboardData = async () => {
     try {
@@ -35,9 +36,10 @@ export default function InventoryDashboard({ userRole }: InventoryDashboardProps
       setLoading(true)
       const filters = {
         startDate: startOfDay(new Date(dateRange.start)),
-        endDate: endOfDay(new Date(dateRange.end)),
+        endDate: endOfDay(new Date(dateRange.end + 'T23:59:59')), // Ensure end of day includes today
         siteId: selectedSite === 'all' ? undefined : selectedSite,
-        areaId: selectedArea === 'all' ? undefined : selectedArea
+        areaId: selectedArea === 'all' ? undefined : selectedArea,
+        signTypeId: selectedSignType === 'all' ? undefined : selectedSignType
       }
       console.log('InventoryDashboard: Calling getDashboardData with filters:', filters)
       const dashboardData = await getDashboardData(filters)
@@ -124,7 +126,7 @@ export default function InventoryDashboard({ userRole }: InventoryDashboardProps
           <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Start Date
@@ -162,6 +164,24 @@ export default function InventoryDashboard({ userRole }: InventoryDashboardProps
               {data.sites.map(site => (
                 <option key={site.id} value={site.id}>
                   {site.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Sign Type
+            </label>
+            <select
+              value={selectedSignType}
+              onChange={(e) => setSelectedSignType(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Sign Types</option>
+              {data.signTypes?.map(signType => (
+                <option key={signType.id} value={signType.id}>
+                  {signType.code} - {signType.description}
                 </option>
               ))}
             </select>

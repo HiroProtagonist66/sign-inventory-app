@@ -6,6 +6,7 @@ export interface DashboardFilters {
   endDate: Date
   siteId?: string
   areaId?: string
+  signTypeId?: string
 }
 
 export interface DashboardSummary {
@@ -47,19 +48,24 @@ export interface DashboardData {
   sitePerformance: SitePerformance[]
   recentSessions: RecentSession[]
   sites: { id: string; name: string }[]
+  signTypes: { id: string; code: string; description: string }[]
 }
 
 export async function getDashboardData(filters: DashboardFilters): Promise<DashboardData> {
   try {
     console.log('Dashboard filters:', filters)
     
-    // Get all sites for filter dropdown
-    const { data: sites } = await supabase
-      .from('sites')
-      .select('id, name')
-      .order('name')
-      
-    console.log('Sites found:', sites?.length || 0)
+    // Get all sites and sign types for filter dropdowns
+    const [sitesResult, signTypesResult] = await Promise.all([
+      supabase.from('sites').select('id, name').order('name'),
+      supabase.from('sign_descriptions').select('id, code, description').order('code')
+    ])
+    
+    const sites = sitesResult.data || []
+    const signTypes = signTypesResult.data || []
+    
+    console.log('Sites found:', sites.length)
+    console.log('Sign types found:', signTypes.length)
 
     // First get relevant sessions based on filters
     let sessionsQuery = supabase
@@ -93,12 +99,37 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     let inventoryLogs: InventoryLog[] = []
     
     if (sessionIds.length > 0) {
-      const { data } = await supabase
+      let inventoryQuery = supabase
         .from('inventory_log')
         .select('*')
         .in('session_id', sessionIds)
+        
+      // If sign type filter is selected, we need to filter by signs that match that type
+      if (filters.signTypeId) {
+        // First get all sign IDs that match the sign type
+        const { data: matchingSigns } = await supabase
+          .from('project_sign_catalog')
+          .select('id')
+          .eq('sign_type_id', filters.signTypeId)
+          
+        const matchingSignIds = matchingSigns?.map(s => s.id) || []
+        console.log('Signs matching type filter:', matchingSignIds.length)
+        
+        if (matchingSignIds.length > 0) {
+          inventoryQuery = inventoryQuery.in('sign_id', matchingSignIds)
+        } else {
+          // No signs match the filter, return empty results
+          inventoryLogs = []
+          console.log('No signs match sign type filter, returning empty results')
+        }
+      }
       
-      inventoryLogs = data || []
+      // Execute the query if we haven't already determined there are no results
+      if (!(filters.signTypeId && inventoryLogs.length === 0)) {
+        const { data } = await inventoryQuery
+        inventoryLogs = data || []
+      }
+      
       console.log('Inventory logs found:', inventoryLogs.length, inventoryLogs)
     } else {
       console.log('No sessions found, checking all inventory logs for debugging...')
@@ -125,6 +156,9 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     }
     if (filters.areaId) {
       catalogQuery = catalogQuery.eq('area_id', filters.areaId)
+    }
+    if (filters.signTypeId) {
+      catalogQuery = catalogQuery.eq('sign_type_id', filters.signTypeId)
     }
 
     const { count: totalSigns } = await catalogQuery
@@ -230,7 +264,8 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
       recentSessions: recentSessionsData.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       ),
-      sites: sites || []
+      sites,
+      signTypes
     }
   } catch (error) {
     console.error('Error fetching dashboard data:', error)
