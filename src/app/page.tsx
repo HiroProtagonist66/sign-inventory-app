@@ -57,7 +57,7 @@ export default function ProjectSelection() {
   }
 
   function handleInventoryDashboard() {
-    router.push('/dashboard')
+    router.push('/dashboard?t=' + Date.now()) // Cache busting
   }
 
   if (loading) {
@@ -83,7 +83,7 @@ export default function ProjectSelection() {
               )}
             </div>
             <div className="flex items-center gap-3">
-              {userProfile && (userProfile.role === 'manager' || userProfile.role === 'project_manager') && (
+              {userProfile && (
                 <button
                   onClick={handleInventoryDashboard}
                   className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
