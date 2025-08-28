@@ -1,0 +1,127 @@
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
+
+CREATE TABLE public.hotspots (
+  slp_page_id uuid NOT NULL,
+  sign_number text NOT NULL,
+  sign_description_id uuid NOT NULL,
+  x_percentage numeric NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  inventory_status text DEFAULT 'Not_Inventoried_Yet'::text,
+  install_status text DEFAULT 'Pending_Install'::text,
+  y_percentage numeric NOT NULL,
+  width_percentage numeric NOT NULL,
+  height_percentage numeric NOT NULL,
+  notes text,
+  bbox jsonb,
+  created_at timestamp with time zone DEFAULT now(),
+  last_modified_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT hotspots_pkey PRIMARY KEY (id),
+  CONSTRAINT hotspots_slp_page_id_fkey FOREIGN KEY (slp_page_id) REFERENCES public.slp_pages(id),
+  CONSTRAINT hotspots_sign_description_id_fkey FOREIGN KEY (sign_description_id) REFERENCES public.sign_descriptions(id)
+);
+CREATE TABLE public.installation_photos (
+  installation_type_hint_at_upload text,
+  ocr_extracted_front_message text,
+  project_sign_catalog_id uuid,
+  site_id_at_upload uuid NOT NULL,
+  front_photo_storage_path text NOT NULL,
+  ocr_extracted_sign_type text,
+  ocr_extracted_sign_number text,
+  ocr_raw_text text,
+  ocr_confidence numeric,
+  processed_at timestamp with time zone,
+  uploaded_by_user_id uuid,
+  notes text,
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  status text NOT NULL DEFAULT 'pending_ocr'::text,
+  is_verified boolean NOT NULL DEFAULT false,
+  uploaded_at timestamp with time zone NOT NULL DEFAULT now(),
+  back_photo_storage_path text,
+  CONSTRAINT installation_photos_pkey PRIMARY KEY (id),
+  CONSTRAINT installation_photos_uploaded_by_user_id_fkey FOREIGN KEY (uploaded_by_user_id) REFERENCES auth.users(id),
+  CONSTRAINT installation_photos_site_id_at_upload_fkey FOREIGN KEY (site_id_at_upload) REFERENCES public.sites(id),
+  CONSTRAINT installation_photos_project_sign_catalog_id_fkey FOREIGN KEY (project_sign_catalog_id) REFERENCES public.project_sign_catalog(id)
+);
+CREATE TABLE public.inventory_log (
+  session_id uuid,
+  site_id uuid NOT NULL,
+  user_id uuid,
+  inventory_type text NOT NULL,
+  sign_number text,
+  sign_description_id uuid,
+  quantity integer NOT NULL,
+  notes text,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT inventory_log_pkey PRIMARY KEY (id),
+  CONSTRAINT inventory_log_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.inventory_sessions(id),
+  CONSTRAINT inventory_log_sign_description_id_fkey FOREIGN KEY (sign_description_id) REFERENCES public.sign_descriptions(id),
+  CONSTRAINT inventory_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT inventory_log_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.inventory_sessions (
+  site_id uuid NOT NULL,
+  user_id uuid,
+  session_name text,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT inventory_sessions_pkey PRIMARY KEY (id),
+  CONSTRAINT inventory_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id),
+  CONSTRAINT inventory_sessions_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.project_areas (
+  site_id uuid NOT NULL,
+  area_name text NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT project_areas_pkey PRIMARY KEY (id),
+  CONSTRAINT project_areas_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.project_sign_catalog (
+  site_id uuid NOT NULL,
+  sign_number text NOT NULL,
+  sign_description_id uuid,
+  side_a_message text,
+  side_b_message text,
+  original_csv_notes text,
+  original_csv_level_no text,
+  original_csv_location_plan text,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT project_sign_catalog_pkey PRIMARY KEY (id),
+  CONSTRAINT project_sign_catalog_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id),
+  CONSTRAINT project_sign_catalog_sign_description_id_fkey FOREIGN KEY (sign_description_id) REFERENCES public.sign_descriptions(id)
+);
+CREATE TABLE public.sign_descriptions (
+  sign_type_code text NOT NULL UNIQUE,
+  description text,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sign_descriptions_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.sites (
+  name text NOT NULL UNIQUE,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT sites_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.slp_areas (
+  site_id uuid NOT NULL,
+  name text NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT slp_areas_pkey PRIMARY KEY (id),
+  CONSTRAINT slp_areas_site_id_fkey FOREIGN KEY (site_id) REFERENCES public.sites(id)
+);
+CREATE TABLE public.slp_pages (
+  slp_area_id uuid NOT NULL,
+  page_number integer NOT NULL,
+  image_storage_path text NOT NULL,
+  image_width_pixels integer NOT NULL,
+  image_height_pixels integer NOT NULL,
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT slp_pages_pkey PRIMARY KEY (id),
+  CONSTRAINT slp_pages_slp_area_id_fkey FOREIGN KEY (slp_area_id) REFERENCES public.slp_areas(id)
+);
