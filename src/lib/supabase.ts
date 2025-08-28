@@ -214,7 +214,7 @@ export interface UserProfile {
   id: string
   email: string
   full_name: string | null
-  role: 'manager' | 'installer'
+  role: 'manager' | 'installer' | 'project_manager'
   created_at: string
   updated_at: string
 }

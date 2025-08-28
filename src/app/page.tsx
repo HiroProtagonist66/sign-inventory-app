@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAssignedSites, getCurrentUserProfile, Site, UserProfile } from '@/lib/supabase'
 import { useOnlineStatus } from '@/lib/offline-storage'
-import { Building2, Wifi, WifiOff, Settings } from 'lucide-react'
+import { Building2, Wifi, WifiOff, Settings, BarChart3 } from 'lucide-react'
 import AuthGuard from '@/components/AuthGuard'
 import toast from 'react-hot-toast'
 
@@ -55,6 +55,10 @@ export default function ProjectSelection() {
     router.push('/manager')
   }
 
+  function handleInventoryDashboard() {
+    router.push('/dashboard')
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -78,11 +82,20 @@ export default function ProjectSelection() {
               )}
             </div>
             <div className="flex items-center gap-3">
+              {(userProfile?.role === 'manager' || userProfile?.role === 'project_manager') && (
+                <button
+                  onClick={handleInventoryDashboard}
+                  className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                  title="Inventory Dashboard"
+                >
+                  <BarChart3 className="h-5 w-5" />
+                </button>
+              )}
               {userProfile?.role === 'manager' && (
                 <button
                   onClick={handleManagerDashboard}
                   className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
-                  title="Manager Dashboard"
+                  title="Manager Settings"
                 >
                   <Settings className="h-5 w-5" />
                 </button>
@@ -113,13 +126,23 @@ export default function ProjectSelection() {
                 : 'No projects are available at this time.'
               }
             </p>
-            {userProfile?.role === 'manager' && (
-              <button
-                onClick={handleManagerDashboard}
-                className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-              >
-                Go to Manager Dashboard
-              </button>
+            {(userProfile?.role === 'manager' || userProfile?.role === 'project_manager') && (
+              <div className="mt-4 flex gap-3 justify-center">
+                <button
+                  onClick={handleInventoryDashboard}
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
+                >
+                  View Dashboard
+                </button>
+                {userProfile?.role === 'manager' && (
+                  <button
+                    onClick={handleManagerDashboard}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  >
+                    Manager Settings
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ) : (
