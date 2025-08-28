@@ -161,8 +161,8 @@ export default function InventoryChecklist() {
     const area = areaData ? JSON.parse(areaData) : null
     setSelectedArea(area)
 
-    await loadSigns(site.id, area?.area_name, sortBy)
-  }, [router, loadSigns, sortBy])
+    await loadSigns(site.id, area?.area_name, 'sign_number') // Always load with default sort
+  }, [router, loadSigns])
 
   useEffect(() => {
     initializeInventory()
