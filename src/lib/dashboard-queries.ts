@@ -107,6 +107,12 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
         .select('*')
         .limit(5)
       console.log('Sample inventory logs:', allLogs)
+      
+      const { data: allSessions } = await supabase
+        .from('inventory_sessions')
+        .select('*')
+        .limit(5)
+      console.log('Sample inventory sessions:', allSessions)
     }
 
     // Get total signs count
