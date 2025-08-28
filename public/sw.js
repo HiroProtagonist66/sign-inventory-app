@@ -1,6 +1,7 @@
 // Service Worker for Sign Inventory App
-const CACHE_NAME = 'sign-inventory-v2';
-const RUNTIME_CACHE = 'runtime-cache-v1';
+// Increment version to force cache update
+const CACHE_NAME = 'sign-inventory-v3';
+const RUNTIME_CACHE = 'runtime-cache-v2';
 
 const urlsToCache = [
   '/',

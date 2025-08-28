@@ -412,19 +412,25 @@ export default function InventoryChecklist() {
                 </select>
               </div>
               
+              {/* Always show filter, even if empty */}
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">Filter by:</span>
                 <select
                   value={selectedSignType}
                   onChange={(e) => setSelectedSignType(e.target.value)}
                   className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={signTypes.length === 0}
                 >
                   <option value="all">All Sign Types</option>
-                  {signTypes.map(signType => (
-                    <option key={signType.id} value={signType.id}>
-                      {signType.code} - {signType.description}
-                    </option>
-                  ))}
+                  {signTypes.length === 0 ? (
+                    <option value="loading" disabled>Loading...</option>
+                  ) : (
+                    signTypes.map(signType => (
+                      <option key={signType.id} value={signType.id}>
+                        {signType.code} - {signType.description}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
