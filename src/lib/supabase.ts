@@ -341,26 +341,32 @@ export async function getAssignedSites(): Promise<Site[]> {
     return getSites()
   }
 
-  // If installer, return only assigned sites
-  const { data, error } = await supabase
+  // If installer, get assigned site IDs first, then fetch site details
+  const { data: assignments, error: assignmentError } = await supabase
     .from('user_site_assignments')
-    .select(`
-      sites (*)
-    `)
+    .select('site_id')
     .eq('user_id', userData.user.id)
 
-  if (error) {
-    console.error('Error fetching assigned sites:', error)
-    throw new Error(`Failed to fetch assigned sites: ${error.message}`)
+  if (assignmentError) {
+    console.error('Error fetching user assignments:', assignmentError)
+    throw new Error(`Failed to fetch assignments: ${assignmentError.message}`)
   }
 
-  // Extract sites from the nested structure
-  const sites = data?.reduce((acc: Site[], item: { sites?: Site }) => {
-    if (item.sites) {
-      acc.push(item.sites)
-    }
-    return acc
-  }, []) || []
+  if (!assignments || assignments.length === 0) {
+    return []
+  }
 
-  return sites
+  // Get the actual site details
+  const siteIds = assignments.map(a => a.site_id)
+  const { data: sites, error: sitesError } = await supabase
+    .from('sites')
+    .select('*')
+    .in('id', siteIds)
+
+  if (sitesError) {
+    console.error('Error fetching assigned sites:', sitesError)
+    throw new Error(`Failed to fetch assigned sites: ${sitesError.message}`)
+  }
+
+  return sites || []
 }
