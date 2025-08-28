@@ -75,8 +75,23 @@ export default function InventoryChecklist() {
       console.log('Extracted sign types:', uniqueSignTypes)
       console.log('Sign types count:', uniqueSignTypes.length)
       setSignTypes(uniqueSignTypes)
+      
+      // Store in sessionStorage for persistence
+      if (uniqueSignTypes.length > 0) {
+        sessionStorage.setItem('signTypes', JSON.stringify(uniqueSignTypes))
+      }
     }
   }, [signs])
+  
+  // Load sign types from sessionStorage on mount as fallback
+  useEffect(() => {
+    const storedTypes = sessionStorage.getItem('signTypes')
+    if (storedTypes && signTypes.length === 0) {
+      const parsed = JSON.parse(storedTypes)
+      console.log('Loading sign types from sessionStorage:', parsed.length)
+      setSignTypes(parsed)
+    }
+  }, [])
 
   // Filter signs when sign type filter changes
   useEffect(() => {
