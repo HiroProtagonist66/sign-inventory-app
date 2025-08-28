@@ -21,16 +21,26 @@ export default function ProjectSelection() {
 
   async function loadData() {
     try {
+      console.log('Loading user data...')
       const [profileData, sitesData] = await Promise.all([
-        getCurrentUserProfile(),
-        getAssignedSites()
+        getCurrentUserProfile().catch(err => {
+          console.error('Profile loading failed:', err)
+          return null
+        }),
+        getAssignedSites().catch(err => {
+          console.error('Sites loading failed:', err)
+          return []
+        })
       ])
+      
+      console.log('Profile data:', profileData)
+      console.log('Sites data:', sitesData)
       
       setUserProfile(profileData)
       setSites(sitesData)
     } catch (error) {
       console.error('Error loading data:', error)
-      toast.error('Failed to load projects')
+      toast.error(`Failed to load projects: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setLoading(false)
     }
