@@ -9,7 +9,8 @@ import {
   ProjectSignCatalog, 
   Site, 
   ProjectArea,
-  InventoryLogRecord
+  InventoryLogRecord,
+  supabase
 } from '@/lib/supabase'
 import { useOnlineStatus, offlineStorage } from '@/lib/offline-storage'
 import { 
@@ -40,8 +41,39 @@ export default function InventoryChecklist() {
   const [saving, setSaving] = useState(false)
   const [queuedCount, setQueuedCount] = useState(0)
   const [sortBy, setSortBy] = useState<'sign_number' | 'sign_type_code' | 'description'>('sign_number')
+  const [signTypes, setSignTypes] = useState<Array<{id: string, code: string, description: string}>>([])
+  const [selectedSignType, setSelectedSignType] = useState<string>('all')
+  const [filteredSigns, setFilteredSigns] = useState<SignWithStatus[]>([])
   const router = useRouter()
   const isOnline = useOnlineStatus()
+
+  // Load sign types on component mount
+  useEffect(() => {
+    const loadSignTypes = async () => {
+      try {
+        const { data } = await supabase
+          .from('sign_descriptions')
+          .select('id, code, description')
+          .order('code')
+        
+        setSignTypes(data || [])
+      } catch (error) {
+        console.error('Error loading sign types:', error)
+      }
+    }
+    
+    loadSignTypes()
+  }, [])
+
+  // Filter signs when sign type filter changes
+  useEffect(() => {
+    if (selectedSignType === 'all') {
+      setFilteredSigns(signs)
+    } else {
+      const filtered = signs.filter(sign => sign.sign_type_id === selectedSignType)
+      setFilteredSigns(filtered)
+    }
+  }, [signs, selectedSignType])
 
   const loadSigns = useCallback(async (siteId: string, areaName?: string, sortBy?: 'sign_number' | 'sign_type_code' | 'description') => {
     try {
@@ -130,7 +162,7 @@ export default function InventoryChecklist() {
   }
 
   function selectAllSigns() {
-    const allSignIds = new Set(signs.map(sign => sign.id))
+    const allSignIds = new Set(filteredSigns.map(sign => sign.id))
     setSelectedSigns(allSignIds)
   }
 
@@ -273,7 +305,7 @@ export default function InventoryChecklist() {
           </div>
 
           <div className="flex items-center justify-between text-sm text-gray-600 mb-4">
-            <span>{signs.length} total signs</span>
+            <span>{filteredSigns.length} filtered signs ({signs.length} total)</span>
             <span>{recordedCount} recorded</span>
           </div>
 
@@ -327,32 +359,52 @@ export default function InventoryChecklist() {
               </button>
             </div>
             
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-600">Sort by:</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as 'sign_number' | 'sign_type_code' | 'description')}
-                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="sign_number">Sign Number</option>
-                <option value="sign_type_code">Sign Type</option>
-                <option value="description">Description</option>
-              </select>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Sort by:</span>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as 'sign_number' | 'sign_type_code' | 'description')}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="sign_number">Sign Number</option>
+                  <option value="sign_type_code">Sign Type</option>
+                  <option value="description">Description</option>
+                </select>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-600">Filter by:</span>
+                <select
+                  value={selectedSignType}
+                  onChange={(e) => setSelectedSignType(e.target.value)}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All Sign Types</option>
+                  {signTypes.map(signType => (
+                    <option key={signType.id} value={signType.id}>
+                      {signType.code} - {signType.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6">
-        {signs.length === 0 ? (
+        {filteredSigns.length === 0 ? (
           <div className="text-center py-12">
             <Square className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">No Signs Found</h3>
-            <p className="text-gray-500">No signs are available for this area.</p>
+            <p className="text-gray-500">
+              {selectedSignType === 'all' ? 'No signs are available for this area.' : 'No signs match the selected filter.'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
-            {signs.map((sign) => (
+            {filteredSigns.map((sign) => (
               <div
                 key={sign.id}
                 className={`bg-white rounded-lg border p-4 transition-colors ${
