@@ -14,6 +14,7 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
 export type Site = {
   id: string
   name: string
+  location?: string
   created_at: string
 }
 
@@ -353,5 +354,13 @@ export async function getAssignedSites(): Promise<Site[]> {
     throw new Error(`Failed to fetch assigned sites: ${error.message}`)
   }
 
-  return (data?.map(item => item.sites).filter(Boolean) || []) as Site[]
+  // Extract sites from the nested structure
+  const sites = data?.reduce((acc: Site[], item: { sites?: Site }) => {
+    if (item.sites) {
+      acc.push(item.sites)
+    }
+    return acc
+  }, []) || []
+
+  return sites
 }

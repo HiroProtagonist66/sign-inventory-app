@@ -150,7 +150,7 @@ export default function ManagerDashboard() {
                 <option value="">Choose site...</option>
                 {sites.map(site => (
                   <option key={site.id} value={site.id}>
-                    {site.name} - {site.location}
+                    {site.name}{site.location ? ` - ${site.location}` : ''}
                   </option>
                 ))}
               </select>
@@ -204,9 +204,11 @@ export default function ManagerDashboard() {
                             <span className="text-sm font-medium">
                               {assignment.sites?.name}
                             </span>
-                            <span className="text-xs text-gray-500">
-                              - {assignment.sites?.location}
-                            </span>
+                            {assignment.sites?.location && (
+                              <span className="text-xs text-gray-500">
+                                - {assignment.sites.location}
+                              </span>
+                            )}
                           </div>
                           <button
                             onClick={() => handleRemoveAssignment(user.id, assignment.site_id)}
