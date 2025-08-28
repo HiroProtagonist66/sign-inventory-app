@@ -414,22 +414,28 @@ export default function InventoryChecklist() {
               
               {/* Always show filter, even if empty */}
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-600">Filter by:</span>
+                <span className="text-sm text-gray-600">Filter:</span>
                 <select
                   value={selectedSignType}
                   onChange={(e) => setSelectedSignType(e.target.value)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 truncate"
                   disabled={signTypes.length === 0}
                 >
                   <option value="all">All Sign Types</option>
                   {signTypes.length === 0 ? (
                     <option value="loading" disabled>Loading...</option>
                   ) : (
-                    signTypes.map(signType => (
-                      <option key={signType.id} value={signType.id}>
-                        {signType.code} - {signType.description}
-                      </option>
-                    ))
+                    signTypes.map(signType => {
+                      // Truncate long descriptions for mobile
+                      const desc = signType.description.length > 20 
+                        ? signType.description.substring(0, 20) + '...' 
+                        : signType.description
+                      return (
+                        <option key={signType.id} value={signType.id}>
+                          {signType.code} - {desc}
+                        </option>
+                      )
+                    })
                   )}
                 </select>
               </div>
