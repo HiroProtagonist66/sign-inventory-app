@@ -70,10 +70,16 @@ export default function InventoryChecklist() {
     if (selectedSignType === 'all') {
       setFilteredSigns(signs)
     } else {
-      const filtered = signs.filter(sign => sign.sign_type_id === selectedSignType)
-      setFilteredSigns(filtered)
+      // Find the selected sign type code from the ID
+      const selectedType = signTypes.find(type => type.id === selectedSignType)
+      if (selectedType) {
+        const filtered = signs.filter(sign => sign.sign_type_code === selectedType.code)
+        setFilteredSigns(filtered)
+      } else {
+        setFilteredSigns(signs)
+      }
     }
-  }, [signs, selectedSignType])
+  }, [signs, selectedSignType, signTypes])
 
   const loadSigns = useCallback(async (siteId: string, areaName?: string, sortBy?: 'sign_number' | 'sign_type_code' | 'description') => {
     try {
