@@ -173,13 +173,24 @@ export default function InventoryChecklist() {
     updateQueuedCount()
   }, [])
 
-  // Reload signs when sort order changes
+  // Sort signs when sort order changes (without reloading from database)
   useEffect(() => {
-    if (selectedSite && signs.length > 0) {
-      setLoading(true)
-      loadSigns(selectedSite.id, selectedArea?.area_name, sortBy)
+    if (signs.length > 0) {
+      const sortedSigns = [...signs].sort((a, b) => {
+        switch (sortBy) {
+          case 'sign_number':
+            return (a.sign_number || '').localeCompare(b.sign_number || '')
+          case 'sign_type_code':
+            return (a.sign_type_code || '').localeCompare(b.sign_type_code || '')
+          case 'description':
+            return (a.description || '').localeCompare(b.description || '')
+          default:
+            return 0
+        }
+      })
+      setSigns(sortedSigns)
     }
-  }, [sortBy, selectedSite, selectedArea, loadSigns, signs.length])
+  }, [sortBy])
 
   async function updateQueuedCount() {
     const count = await offlineStorage.getQueuedRecordsCount()
