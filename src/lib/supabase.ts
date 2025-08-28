@@ -309,23 +309,41 @@ export async function removeUserFromSite(userId: string, siteId: string): Promis
 export async function getUserSiteAssignments(userId?: string): Promise<UserSiteAssignment[]> {
   let query = supabase
     .from('user_site_assignments')
-    .select(`
-      *,
-      user_profiles (id, email, full_name, role),
-      sites (id, name, location)
-    `)
+    .select('*')
 
   if (userId) {
     query = query.eq('user_id', userId)
   }
 
-  const { data, error } = await query.order('assigned_at', { ascending: false })
+  const { data: assignments, error } = await query.order('assigned_at', { ascending: false })
 
   if (error) {
     console.error('Error fetching user site assignments:', error)
     throw new Error(`Failed to fetch assignments: ${error.message}`)
   }
-  return data as UserSiteAssignment[]
+  
+  if (!assignments || assignments.length === 0) {
+    return []
+  }
+
+  // Fetch all related users and sites
+  const userIds = [...new Set(assignments.map(a => a.user_id))]
+  const siteIds = [...new Set(assignments.map(a => a.site_id))]
+
+  const [usersResult, sitesResult] = await Promise.all([
+    supabase.from('user_profiles').select('*').in('id', userIds),
+    supabase.from('sites').select('*').in('id', siteIds)
+  ])
+
+  const usersMap = new Map(usersResult.data?.map(u => [u.id, u]) || [])
+  const sitesMap = new Map(sitesResult.data?.map(s => [s.id, s]) || [])
+
+  // Combine the data
+  return assignments.map(assignment => ({
+    ...assignment,
+    user_profiles: usersMap.get(assignment.user_id),
+    sites: sitesMap.get(assignment.site_id)
+  })) as UserSiteAssignment[]
 }
 
 export async function getAssignedSites(): Promise<Site[]> {
