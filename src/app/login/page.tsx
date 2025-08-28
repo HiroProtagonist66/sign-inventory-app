@@ -3,12 +3,13 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { Lock, Mail, Eye, EyeOff, AlertCircle } from 'lucide-react'
+import { Lock, Mail, Eye, EyeOff, AlertCircle, User } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [fullName, setFullName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
@@ -39,6 +40,11 @@ export default function LoginPage() {
       return
     }
 
+    if (isSignUp && !fullName.trim()) {
+      toast.error('Please enter your full name')
+      return
+    }
+
     setLoading(true)
 
     try {
@@ -47,6 +53,11 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            data: {
+              full_name: fullName.trim()
+            }
+          }
         })
 
         console.log('SignUp response:', { data, error })
@@ -153,6 +164,27 @@ export default function LoginPage() {
                 <Mail className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
               </div>
             </div>
+
+            {isSignUp && (
+              <div>
+                <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                  Full Name
+                </label>
+                <div className="relative">
+                  <input
+                    id="fullName"
+                    type="text"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    placeholder="Your full name"
+                    className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    disabled={loading}
+                    suppressHydrationWarning
+                  />
+                  <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                </div>
+              </div>
+            )}
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">

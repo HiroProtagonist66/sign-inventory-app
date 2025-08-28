@@ -47,33 +47,49 @@ export default function InventoryChecklist() {
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
-  // Load sign types on component mount
+  // Extract unique sign types from the loaded signs
   useEffect(() => {
-    const loadSignTypes = async () => {
-      try {
-        const { data } = await supabase
-          .from('sign_descriptions')
-          .select('id, code, description')
-          .order('code')
-        
-        setSignTypes(data || [])
-      } catch (error) {
-        console.error('Error loading sign types:', error)
-      }
-    }
+    console.log('useEffect for sign types triggered. Signs length:', signs.length)
     
-    loadSignTypes()
-  }, [])
+    if (signs.length > 0) {
+      console.log('Extracting sign types from loaded signs...')
+      console.log('First few signs:', signs.slice(0, 3))
+      
+      // Create a map to avoid duplicates and store unique combinations
+      const signTypeMap = new Map<string, {id: string, code: string, description: string}>()
+      
+      signs.forEach(sign => {
+        if (sign.sign_type_code && sign.description) {
+          const key = `${sign.sign_type_code}-${sign.description}`
+          signTypeMap.set(key, {
+            id: key,
+            code: sign.sign_type_code,
+            description: sign.description
+          })
+        }
+      })
+      
+      const uniqueSignTypes = Array.from(signTypeMap.values())
+        .sort((a, b) => a.code.localeCompare(b.code))
+      
+      console.log('Extracted sign types:', uniqueSignTypes)
+      console.log('Sign types count:', uniqueSignTypes.length)
+      setSignTypes(uniqueSignTypes)
+    }
+  }, [signs])
 
   // Filter signs when sign type filter changes
   useEffect(() => {
     if (selectedSignType === 'all') {
       setFilteredSigns(signs)
     } else {
-      // Find the selected sign type code from the ID
+      // Find the selected sign type from the ID (which is now code-description)
       const selectedType = signTypes.find(type => type.id === selectedSignType)
       if (selectedType) {
-        const filtered = signs.filter(sign => sign.sign_type_code === selectedType.code)
+        const filtered = signs.filter(sign => 
+          sign.sign_type_code === selectedType.code && 
+          sign.description === selectedType.description
+        )
         setFilteredSigns(filtered)
       } else {
         setFilteredSigns(signs)
@@ -105,6 +121,8 @@ export default function InventoryChecklist() {
         status: null
       }))
 
+      console.log('Setting signs in loadSigns. Count:', signsWithStatus.length)
+      console.log('Sample sign data:', signsWithStatus[0])
       setSigns(signsWithStatus)
     } catch (error) {
       console.error('Error loading signs:', error)
