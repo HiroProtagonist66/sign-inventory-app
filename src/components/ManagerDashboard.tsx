@@ -56,12 +56,30 @@ export default function ManagerDashboard() {
 
     try {
       // Assign user to multiple sites
-      const assignmentPromises = selectedSites.map(siteId => 
-        assignUserToSite(selectedUser, siteId)
-      )
+      let newAssignments = 0
+      let skippedAssignments = 0
       
-      await Promise.all(assignmentPromises)
-      toast.success(`User assigned to ${selectedSites.length} site${selectedSites.length > 1 ? 's' : ''} successfully`)
+      for (const siteId of selectedSites) {
+        try {
+          await assignUserToSite(selectedUser, siteId)
+          newAssignments++
+        } catch (error) {
+          if (error instanceof Error && error.message?.includes('already assigned')) {
+            skippedAssignments++
+          } else {
+            throw error
+          }
+        }
+      }
+      
+      if (newAssignments > 0 && skippedAssignments > 0) {
+        toast.success(`User assigned to ${newAssignments} new site${newAssignments > 1 ? 's' : ''} (${skippedAssignments} already assigned)`)
+      } else if (newAssignments > 0) {
+        toast.success(`User assigned to ${newAssignments} site${newAssignments > 1 ? 's' : ''} successfully`)
+      } else if (skippedAssignments > 0) {
+        toast.info(`User already assigned to ${skippedAssignments === 1 ? 'this site' : 'these sites'}`)
+      }
+      
       setSelectedUser('')
       setSelectedSites([])
       loadData() // Refresh data

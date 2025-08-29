@@ -279,6 +279,19 @@ export async function assignUserToSite(userId: string, siteId: string): Promise<
     throw new Error('Must be logged in to assign users')
   }
 
+  // Check if assignment already exists
+  const { data: existing } = await supabase
+    .from('user_site_assignments')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('site_id', siteId)
+    .single()
+
+  if (existing) {
+    console.log('User already assigned to this site')
+    return // Skip if already assigned
+  }
+
   const { error } = await supabase
     .from('user_site_assignments')
     .insert({

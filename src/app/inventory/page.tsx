@@ -13,6 +13,7 @@ import {
 } from '@/lib/supabase'
 import { useOnlineStatus, offlineStorage, ActiveInventorySession } from '@/lib/offline-storage'
 import IndexedDBError from '@/components/IndexedDBError'
+import GlobalErrorHandler from '@/components/GlobalErrorHandler'
 import { 
   ArrowLeft, 
   Wifi, 
@@ -483,6 +484,7 @@ export default function InventoryChecklist() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <GlobalErrorHandler />
       <div className="bg-white shadow-sm border-b sticky top-0 z-10">
         <div className="max-w-md mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
