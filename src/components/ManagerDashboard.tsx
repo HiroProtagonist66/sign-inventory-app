@@ -77,7 +77,9 @@ export default function ManagerDashboard() {
       } else if (newAssignments > 0) {
         toast.success(`User assigned to ${newAssignments} site${newAssignments > 1 ? 's' : ''} successfully`)
       } else if (skippedAssignments > 0) {
-        toast.info(`User already assigned to ${skippedAssignments === 1 ? 'this site' : 'these sites'}`)
+        toast(`User already assigned to ${skippedAssignments === 1 ? 'this site' : 'these sites'}`, {
+          icon: 'ℹ️'
+        })
       }
       
       setSelectedUser('')
