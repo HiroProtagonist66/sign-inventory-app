@@ -22,7 +22,9 @@ import {
   AlertCircle, 
   Square, 
   CheckSquare,
-  Save
+  Save,
+  Search,
+  X
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -44,8 +46,38 @@ export default function InventoryChecklist() {
   const [signTypes, setSignTypes] = useState<Array<{id: string, code: string, description: string}>>([])
   const [selectedSignType, setSelectedSignType] = useState<string>('all')
   const [filteredSigns, setFilteredSigns] = useState<SignWithStatus[]>([])
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [showConnectionAlert, setShowConnectionAlert] = useState(false)
+  const [lastConnectionStatus, setLastConnectionStatus] = useState<boolean | null>(null)
   const router = useRouter()
   const isOnline = useOnlineStatus()
+
+  // Monitor connection status changes
+  useEffect(() => {
+    if (lastConnectionStatus !== null && lastConnectionStatus !== isOnline) {
+      setShowConnectionAlert(true)
+      
+      if (isOnline) {
+        toast.success('Back online! Your changes will be synced.', {
+          duration: 4000,
+          icon: '🌐'
+        })
+      } else {
+        toast.error('You are now offline. Changes will be saved locally.', {
+          duration: 4000,
+          icon: '📡'
+        })
+      }
+      
+      // Hide alert after 5 seconds
+      const timer = setTimeout(() => {
+        setShowConnectionAlert(false)
+      }, 5000)
+      
+      return () => clearTimeout(timer)
+    }
+    setLastConnectionStatus(isOnline)
+  }, [isOnline, lastConnectionStatus])
 
   // Extract unique sign types from the loaded signs
   useEffect(() => {
@@ -93,24 +125,35 @@ export default function InventoryChecklist() {
     }
   }, [])
 
-  // Filter signs when sign type filter changes
+  // Filter signs when sign type filter or search query changes
   useEffect(() => {
-    if (selectedSignType === 'all') {
-      setFilteredSigns(signs)
-    } else {
-      // Find the selected sign type from the ID (which is now code-description)
+    let filtered = signs
+    
+    // Apply sign type filter
+    if (selectedSignType !== 'all') {
       const selectedType = signTypes.find(type => type.id === selectedSignType)
       if (selectedType) {
-        const filtered = signs.filter(sign => 
+        filtered = filtered.filter(sign => 
           sign.sign_type_code === selectedType.code && 
           sign.description === selectedType.description
         )
-        setFilteredSigns(filtered)
-      } else {
-        setFilteredSigns(signs)
       }
     }
-  }, [signs, selectedSignType, signTypes])
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase().trim()
+      filtered = filtered.filter(sign => {
+        return sign.sign_number?.toLowerCase().includes(query) ||
+               sign.sign_type_code?.toLowerCase().includes(query) ||
+               sign.description?.toLowerCase().includes(query) ||
+               sign.side_a_message?.toLowerCase().includes(query) ||
+               sign.side_b_message?.toLowerCase().includes(query)
+      })
+    }
+    
+    setFilteredSigns(filtered)
+  }, [signs, selectedSignType, signTypes, searchQuery])
 
   const loadSigns = useCallback(async (siteId: string, areaName?: string, sortBy?: 'sign_number' | 'sign_type_code' | 'description') => {
     try {
@@ -216,6 +259,19 @@ export default function InventoryChecklist() {
     setSelectedSigns(allSignIds)
   }
 
+  function selectSignsByStatus(status: SignStatus) {
+    const signsByStatus = filteredSigns
+      .filter(sign => sign.status === status)
+      .map(sign => sign.id)
+    setSelectedSigns(new Set(signsByStatus))
+    
+    if (signsByStatus.length === 0) {
+      toast.error(`No ${status || 'unrecorded'} signs found`)
+    } else {
+      toast.success(`Selected ${signsByStatus.length} ${status || 'unrecorded'} signs`)
+    }
+  }
+
   function clearSelection() {
     setSelectedSigns(new Set())
   }
@@ -239,6 +295,25 @@ export default function InventoryChecklist() {
     const statusText = status === 'present' ? 'present' : 
                      status === 'missing' ? 'missing' : 'damaged'
     toast.success(`Marked ${selectedSigns.size} signs as ${statusText}`)
+  }
+
+  function updateSingleSignStatus(signId: string, status: SignStatus) {
+    const updatedSigns = signs.map(sign => {
+      if (sign.id === signId) {
+        return { ...sign, status }
+      }
+      return sign
+    })
+    
+    setSigns(updatedSigns)
+    
+    const statusText = status === 'present' ? 'Present' : 
+                     status === 'missing' ? 'Missing' : 
+                     status === 'damaged' ? 'Damaged' : 'Unrecorded'
+    const sign = signs.find(s => s.id === signId)
+    if (sign) {
+      toast.success(`${sign.sign_number}: ${statusText}`, { duration: 2000 })
+    }
   }
 
   async function saveInventory() {
@@ -294,21 +369,16 @@ export default function InventoryChecklist() {
     }
   }
 
-  function getStatusColor(status: SignStatus) {
-    switch (status) {
-      case 'present': return 'text-green-600'
-      case 'missing': return 'text-red-600'
-      case 'damaged': return 'text-yellow-600'
-      default: return 'text-gray-400'
+  function getCardBackgroundColor(status: SignStatus, isSelected: boolean) {
+    if (isSelected) {
+      return 'border-blue-300 bg-blue-50'
     }
-  }
-
-  function getStatusIcon(status: SignStatus) {
+    
     switch (status) {
-      case 'present': return <CheckCircle2 className="h-5 w-5" />
-      case 'missing': return <XCircle className="h-5 w-5" />
-      case 'damaged': return <AlertCircle className="h-5 w-5" />
-      default: return <Square className="h-5 w-5" />
+      case 'present': return 'border-green-300 bg-green-50'
+      case 'missing': return 'border-red-300 bg-red-50'
+      case 'damaged': return 'border-yellow-300 bg-yellow-50'
+      default: return 'border-gray-200 bg-white'
     }
   }
 
@@ -342,15 +412,22 @@ export default function InventoryChecklist() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
+              isOnline 
+                ? 'bg-green-100 border border-green-300' 
+                : 'bg-red-100 border border-red-300 animate-pulse'
+            }`}>
               {isOnline ? (
-                <Wifi className="h-5 w-5 text-green-500" />
+                <>
+                  <Wifi className="h-4 w-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-700">Online</span>
+                </>
               ) : (
-                <WifiOff className="h-5 w-5 text-red-500" />
+                <>
+                  <WifiOff className="h-4 w-4 text-red-600" />
+                  <span className="text-sm font-medium text-red-700">Offline</span>
+                </>
               )}
-              <span className="text-sm text-gray-500">
-                {isOnline ? 'Online' : 'Offline'}
-              </span>
             </div>
           </div>
 
@@ -387,18 +464,30 @@ export default function InventoryChecklist() {
 
           <div className="mb-4">
             <div className="flex gap-2 mb-3">
-              <button
-                onClick={selectAllSigns}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Select All
-              </button>
-              <button
-                onClick={clearSelection}
-                className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Clear
-              </button>
+              <div className="flex-1 relative">
+                <select
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === 'all') selectAllSigns()
+                    else if (value === 'clear') clearSelection()
+                    else if (value === 'present') selectSignsByStatus('present')
+                    else if (value === 'missing') selectSignsByStatus('missing')
+                    else if (value === 'damaged') selectSignsByStatus('damaged')
+                    else if (value === 'unrecorded') selectSignsByStatus(null)
+                    e.target.value = 'select' // Reset dropdown
+                  }}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors appearance-none cursor-pointer"
+                  defaultValue="select"
+                >
+                  <option value="select" disabled>Select...</option>
+                  <option value="all">Select All</option>
+                  <option value="clear">Clear Selection</option>
+                  <option value="present">Select Present</option>
+                  <option value="missing">Select Missing</option>
+                  <option value="damaged">Select Damaged</option>
+                  <option value="unrecorded">Select Unrecorded</option>
+                </select>
+              </div>
               <button
                 onClick={saveInventory}
                 disabled={saving || recordedCount === 0}
@@ -410,6 +499,26 @@ export default function InventoryChecklist() {
             </div>
             
             <div className="flex flex-col gap-2">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search signs..."
+                  className="w-full pl-10 pr-8 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+                  >
+                    <X className="h-3 w-3 text-gray-500" />
+                  </button>
+                )}
+              </div>
+
               <div className="flex items-center gap-2">
                 <span className="text-sm text-gray-600">Sort by:</span>
                 <select
@@ -469,22 +578,9 @@ export default function InventoryChecklist() {
             {filteredSigns.map((sign) => (
               <div
                 key={sign.id}
-                className={`bg-white rounded-lg border p-4 transition-colors ${
-                  selectedSigns.has(sign.id) ? 'border-blue-300 bg-blue-50' : 'border-gray-200'
-                }`}
+                className={`rounded-lg border p-4 transition-colors ${getCardBackgroundColor(sign.status, selectedSigns.has(sign.id))}`}
               >
                 <div className="flex items-start gap-3">
-                  <button
-                    onClick={() => toggleSignSelection(sign.id)}
-                    className="mt-1 flex-shrink-0"
-                  >
-                    {selectedSigns.has(sign.id) ? (
-                      <CheckSquare className="h-5 w-5 text-blue-600" />
-                    ) : (
-                      <Square className="h-5 w-5 text-gray-400" />
-                    )}
-                  </button>
-                  
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-3">
@@ -501,11 +597,55 @@ export default function InventoryChecklist() {
                         <p className="text-xs text-gray-400 italic">{sign.side_a_message}</p>
                       )}
                     </div>
+                    
+                    {/* Quick status toggle buttons */}
+                    <div className="flex gap-1 mt-2">
+                      <button
+                        onClick={() => updateSingleSignStatus(sign.id, 'present')}
+                        className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                          sign.status === 'present' 
+                            ? 'bg-green-600 text-white' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700'
+                        }`}
+                      >
+                        <CheckCircle2 className="h-3 w-3 inline mr-1" />
+                        Present
+                      </button>
+                      <button
+                        onClick={() => updateSingleSignStatus(sign.id, 'missing')}
+                        className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                          sign.status === 'missing' 
+                            ? 'bg-red-600 text-white' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-700'
+                        }`}
+                      >
+                        <XCircle className="h-3 w-3 inline mr-1" />
+                        Missing
+                      </button>
+                      <button
+                        onClick={() => updateSingleSignStatus(sign.id, 'damaged')}
+                        className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                          sign.status === 'damaged' 
+                            ? 'bg-yellow-600 text-white' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-yellow-100 hover:text-yellow-700'
+                        }`}
+                      >
+                        <AlertCircle className="h-3 w-3 inline mr-1" />
+                        Damaged
+                      </button>
+                    </div>
                   </div>
 
-                  <div className={`flex-shrink-0 ${getStatusColor(sign.status)}`}>
-                    {getStatusIcon(sign.status)}
-                  </div>
+                  <button
+                    onClick={() => toggleSignSelection(sign.id)}
+                    className="mt-1 flex-shrink-0"
+                  >
+                    {selectedSigns.has(sign.id) ? (
+                      <CheckSquare className="h-5 w-5 text-blue-600" />
+                    ) : (
+                      <Square className="h-5 w-5 text-gray-400" />
+                    )}
+                  </button>
                 </div>
               </div>
             ))}

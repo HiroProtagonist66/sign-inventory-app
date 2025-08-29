@@ -2,12 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   // Enable static optimization for better performance
-  output: 'standalone',
+  // output: 'standalone', // Temporarily disabled for development
   
   // PWA and service worker support
-  experimental: {
-    webpackBuildWorker: true,
-  },
+  // experimental: {
+  //   webpackBuildWorker: true,
+  // },
 
   // Headers for security and PWA
   async headers() {
