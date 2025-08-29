@@ -1,15 +1,35 @@
 import { ProjectSignCatalog, InventoryLogRecord, createInventoryLogRecords } from './supabase'
 
 const DB_NAME = 'SignInventoryDB'
-const DB_VERSION = 1
+const DB_VERSION = 2  // Increment version for new store
 const SIGNS_STORE = 'signs'
 const QUEUE_STORE = 'syncQueue'
+const ACTIVE_INVENTORY_STORE = 'activeInventory'
 
 interface QueueItem {
   id?: number
   type: 'inventory_records'
   data: Omit<InventoryLogRecord, 'id' | 'created_at'>[]
   timestamp: number
+}
+
+export interface ActiveInventorySession {
+  id: string  // site_id + area_id combination
+  site_id: string
+  site_name: string
+  area_id?: string
+  area_name?: string
+  signs: Array<{
+    id: string
+    sign_number: string
+    sign_type_code?: string
+    description?: string
+    side_a_message?: string
+    side_b_message?: string
+    status: 'present' | 'missing' | 'damaged' | null
+  }>
+  lastModified: number
+  createdAt: number
 }
 
 class OfflineStorage {
@@ -38,6 +58,12 @@ class OfflineStorage {
 
         if (!db.objectStoreNames.contains(QUEUE_STORE)) {
           db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
+        }
+
+        if (!db.objectStoreNames.contains(ACTIVE_INVENTORY_STORE)) {
+          const activeStore = db.createObjectStore(ACTIVE_INVENTORY_STORE, { keyPath: 'id' })
+          activeStore.createIndex('site_id', 'site_id', { unique: false })
+          activeStore.createIndex('lastModified', 'lastModified', { unique: false })
         }
       }
     })
@@ -188,6 +214,86 @@ class OfflineStorage {
       clearQueue.onsuccess = onComplete
       clearSigns.onerror = () => reject(clearSigns.error)
       clearQueue.onerror = () => reject(clearQueue.error)
+    })
+  }
+
+  // Active Inventory Session methods for persistent state
+  async saveActiveInventory(session: ActiveInventorySession): Promise<void> {
+    await this.init()
+    if (!this.db) throw new Error('Database not initialized')
+
+    session.lastModified = Date.now()
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([ACTIVE_INVENTORY_STORE], 'readwrite')
+      const store = transaction.objectStore(ACTIVE_INVENTORY_STORE)
+      const request = store.put(session)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getActiveInventory(siteId: string, areaId?: string): Promise<ActiveInventorySession | null> {
+    await this.init()
+    if (!this.db) return null
+
+    const sessionId = areaId ? `${siteId}_${areaId}` : siteId
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([ACTIVE_INVENTORY_STORE], 'readonly')
+      const store = transaction.objectStore(ACTIVE_INVENTORY_STORE)
+      const request = store.get(sessionId)
+
+      request.onsuccess = () => {
+        const result = request.result
+        resolve(result || null)
+      }
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getAllActiveInventories(): Promise<ActiveInventorySession[]> {
+    await this.init()
+    if (!this.db) return []
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([ACTIVE_INVENTORY_STORE], 'readonly')
+      const store = transaction.objectStore(ACTIVE_INVENTORY_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async deleteActiveInventory(siteId: string, areaId?: string): Promise<void> {
+    await this.init()
+    if (!this.db) return
+
+    const sessionId = areaId ? `${siteId}_${areaId}` : siteId
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([ACTIVE_INVENTORY_STORE], 'readwrite')
+      const store = transaction.objectStore(ACTIVE_INVENTORY_STORE)
+      const request = store.delete(sessionId)
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getActiveInventoryCount(): Promise<number> {
+    await this.init()
+    if (!this.db) return 0
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([ACTIVE_INVENTORY_STORE], 'readonly')
+      const store = transaction.objectStore(ACTIVE_INVENTORY_STORE)
+      const request = store.count()
+
+      request.onsuccess = () => resolve(request.result)
+      request.onerror = () => reject(request.error)
     })
   }
 }

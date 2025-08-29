@@ -12,7 +12,7 @@ import {
   InventoryLogRecord,
   supabase
 } from '@/lib/supabase'
-import { useOnlineStatus, offlineStorage } from '@/lib/offline-storage'
+import { useOnlineStatus, offlineStorage, ActiveInventorySession } from '@/lib/offline-storage'
 import { 
   ArrowLeft, 
   Wifi, 
@@ -190,6 +190,41 @@ export default function InventoryChecklist() {
     }
   }, [isOnline])
 
+  // Save current inventory state to IndexedDB
+  const saveInventoryToIndexedDB = useCallback(async (updatedSigns: SignWithStatus[]) => {
+    if (!selectedSite) return
+    
+    const sessionId = selectedArea 
+      ? `${selectedSite.id}_${selectedArea.id}` 
+      : selectedSite.id
+    
+    const session: ActiveInventorySession = {
+      id: sessionId,
+      site_id: selectedSite.id,
+      site_name: (selectedSite as any).site_name || selectedSite.id,
+      area_id: selectedArea?.id,
+      area_name: selectedArea?.area_name,
+      signs: updatedSigns.map(sign => ({
+        id: sign.id,
+        sign_number: sign.sign_number,
+        sign_type_code: sign.sign_type_code,
+        description: sign.description,
+        side_a_message: sign.side_a_message,
+        side_b_message: sign.side_b_message,
+        status: sign.status
+      })),
+      lastModified: Date.now(),
+      createdAt: Date.now()
+    }
+    
+    try {
+      await offlineStorage.saveActiveInventory(session)
+      console.log('Inventory saved to IndexedDB')
+    } catch (error) {
+      console.error('Failed to save inventory to IndexedDB:', error)
+    }
+  }, [selectedSite, selectedArea])
+
   const initializeInventory = useCallback(async () => {
     const siteData = sessionStorage.getItem('selectedSite')
     if (!siteData) {
@@ -204,7 +239,41 @@ export default function InventoryChecklist() {
     const area = areaData ? JSON.parse(areaData) : null
     setSelectedArea(area)
 
-    await loadSigns(site.id, area?.area_name, 'sign_number') // Always load with default sort
+    // Check for saved inventory session in IndexedDB
+    const sessionId = area ? `${site.id}_${area.id}` : site.id
+    const savedSession = await offlineStorage.getActiveInventory(site.id, area?.id)
+    
+    if (savedSession && savedSession.signs.length > 0) {
+      // Restore saved inventory with status
+      const restoredSigns: SignWithStatus[] = savedSession.signs.map(sign => ({
+        id: sign.id,
+        sign_number: sign.sign_number,
+        sign_type_code: sign.sign_type_code || undefined,
+        description: sign.description || undefined,
+        side_a_message: sign.side_a_message || undefined,
+        side_b_message: sign.side_b_message || undefined,
+        status: sign.status,
+        site_id: site.id,
+        original_csv_level_no: undefined,
+        original_csv_location_plan: undefined,
+        original_csv_location_description: undefined,
+        sign_description_id: undefined,
+        original_project_area: undefined,
+        location_updated: undefined,
+        row_number: undefined,
+        created_at: new Date().toISOString()
+      }))
+      
+      setSigns(restoredSigns)
+      toast.success('Restored unsaved inventory from previous session', { 
+        duration: 4000,
+        icon: '💾'
+      })
+      setLoading(false)
+    } else {
+      // Load fresh from database
+      await loadSigns(site.id, area?.area_name, 'sign_number')
+    }
   }, [router, loadSigns])
 
   useEffect(() => {
@@ -292,6 +361,9 @@ export default function InventoryChecklist() {
     setSigns(updatedSigns)
     setSelectedSigns(new Set())
     
+    // Auto-save to IndexedDB
+    saveInventoryToIndexedDB(updatedSigns)
+    
     const statusText = status === 'present' ? 'present' : 
                      status === 'missing' ? 'missing' : 'damaged'
     toast.success(`Marked ${selectedSigns.size} signs as ${statusText}`)
@@ -306,6 +378,9 @@ export default function InventoryChecklist() {
     })
     
     setSigns(updatedSigns)
+    
+    // Auto-save to IndexedDB
+    saveInventoryToIndexedDB(updatedSigns)
     
     const statusText = status === 'present' ? 'Present' : 
                      status === 'missing' ? 'Missing' : 
@@ -359,6 +434,9 @@ export default function InventoryChecklist() {
         toast.success('Inventory saved offline. Will sync when connection is restored.')
       }
 
+      // Clear the saved session from IndexedDB after successful save
+      await offlineStorage.deleteActiveInventory(selectedSite.id, selectedArea?.id)
+      
       setSigns(signs.map(sign => ({ ...sign, status: null })))
 
     } catch (error) {
@@ -435,6 +513,25 @@ export default function InventoryChecklist() {
             <span>{filteredSigns.length} filtered signs ({signs.length} total)</span>
             <span>{recordedCount} recorded</span>
           </div>
+
+          {/* Unsaved changes indicator */}
+          {recordedCount > 0 && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-amber-600" />
+                <span className="text-sm font-medium text-amber-800">
+                  {recordedCount} unsaved {recordedCount === 1 ? 'change' : 'changes'} (auto-saved locally)
+                </span>
+              </div>
+              <button
+                onClick={saveInventory}
+                disabled={saving}
+                className="px-3 py-1 text-xs bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Now'}
+              </button>
+            </div>
+          )}
 
           {selectedSigns.size > 0 && (
             <div className="flex gap-2 mb-4 flex-wrap">
