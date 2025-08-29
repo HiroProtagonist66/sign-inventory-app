@@ -149,9 +149,14 @@ export default function InventoryChecklist() {
       let signsData: ProjectSignCatalog[] = []
       
       if (!isOnline) {
-        const cachedSigns = await offlineStorage.getCachedSignCatalog(siteId)
+        // When offline, load cached signs for the specific area
+        const areaId = selectedArea?.id
+        const cachedSigns = await offlineStorage.getCachedSignCatalog(siteId, areaId)
         if (cachedSigns) {
           signsData = cachedSigns
+          toast.success(`Loaded ${cachedSigns.length} signs from offline cache`)
+        } else {
+          toast.error('No offline data available for this area')
         }
       }
       
@@ -159,7 +164,9 @@ export default function InventoryChecklist() {
         signsData = await getProjectSignCatalog(siteId, areaName, sortBy || 'sign_number')
         
         if (signsData && signsData.length > 0) {
-          await offlineStorage.cacheSignCatalog(siteId, undefined, signsData)
+          // Cache with the area ID when online
+          const areaId = selectedArea?.id
+          await offlineStorage.cacheSignCatalog(siteId, areaId, signsData)
         }
       }
 
@@ -177,7 +184,7 @@ export default function InventoryChecklist() {
     } finally {
       setLoading(false)
     }
-  }, [isOnline])
+  }, [isOnline, selectedArea])
 
   // Save current inventory state to IndexedDB
   const saveInventoryToIndexedDB = useCallback(async (updatedSigns: SignWithStatus[]) => {

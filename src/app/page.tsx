@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { getAssignedSites, getCurrentUserProfile, Site, UserProfile } from '@/lib/supabase'
-import { useOnlineStatus } from '@/lib/offline-storage'
+import { useOnlineStatus, offlineStorage } from '@/lib/offline-storage'
 import { Building2, Wifi, WifiOff, Settings, BarChart3 } from 'lucide-react'
 import AuthGuard from '@/components/AuthGuard'
 import toast from 'react-hot-toast'
@@ -17,11 +17,24 @@ export default function ProjectSelection() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [isOnline]) // Reload when online status changes
 
   async function loadData() {
     try {
       console.log('Loading user data...')
+      
+      // Try to load from offline cache first if offline
+      if (!isOnline) {
+        const cachedSites = await offlineStorage.getCachedSites()
+        if (cachedSites.length > 0) {
+          setSites(cachedSites)
+          toast.success('Loading sites from offline cache')
+          setLoading(false)
+          return
+        }
+      }
+      
+      // Online - fetch fresh data
       const [profileData, sitesData] = await Promise.all([
         getCurrentUserProfile().catch(err => {
           console.error('Profile loading failed:', err)
@@ -39,6 +52,13 @@ export default function ProjectSelection() {
       
       setUserProfile(profileData)
       setSites(sitesData)
+      
+      // Cache sites for offline use if any are available
+      if (sitesData.length > 0 && isOnline) {
+        for (const site of sitesData) {
+          await offlineStorage.cacheSite(site)
+        }
+      }
     } catch (error) {
       console.error('Error loading data:', error)
       toast.error(`Failed to load projects: ${error instanceof Error ? error.message : 'Unknown error'}`)

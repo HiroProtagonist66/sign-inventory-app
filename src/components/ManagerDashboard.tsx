@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { UserPlus, MapPin, Trash2, Settings, Users } from 'lucide-react'
+import { UserPlus, MapPin, Trash2, Settings, Users, CheckSquare, Square } from 'lucide-react'
 import { toast } from 'react-hot-toast'
 import { 
   getAllUsers, 
@@ -9,6 +9,7 @@ import {
   assignUserToSite, 
   removeUserFromSite,
   getSites,
+  updateUserRole,
   type UserProfile,
   type UserSiteAssignment,
   type Site
@@ -20,7 +21,8 @@ export default function ManagerDashboard() {
   const [assignments, setAssignments] = useState<UserSiteAssignment[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedUser, setSelectedUser] = useState<string>('')
-  const [selectedSite, setSelectedSite] = useState<string>('')
+  const [selectedSites, setSelectedSites] = useState<string[]>([])
+  const [changingRole, setChangingRole] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -47,20 +49,25 @@ export default function ManagerDashboard() {
   }
 
   const handleAssignUser = async () => {
-    if (!selectedUser || !selectedSite) {
-      toast.error('Please select both user and site')
+    if (!selectedUser || selectedSites.length === 0) {
+      toast.error('Please select both user and at least one site')
       return
     }
 
     try {
-      await assignUserToSite(selectedUser, selectedSite)
-      toast.success('User assigned to site successfully')
+      // Assign user to multiple sites
+      const assignmentPromises = selectedSites.map(siteId => 
+        assignUserToSite(selectedUser, siteId)
+      )
+      
+      await Promise.all(assignmentPromises)
+      toast.success(`User assigned to ${selectedSites.length} site${selectedSites.length > 1 ? 's' : ''} successfully`)
       setSelectedUser('')
-      setSelectedSite('')
+      setSelectedSites([])
       loadData() // Refresh data
     } catch (error) {
       console.error('Error assigning user:', error)
-      toast.error('Failed to assign user to site')
+      toast.error('Failed to assign user to sites')
     }
   }
 
@@ -75,10 +82,38 @@ export default function ManagerDashboard() {
     }
   }
 
+  const handleRoleChange = async (userId: string, newRole: 'manager' | 'installer' | 'project_manager') => {
+    setChangingRole(userId)
+    try {
+      await updateUserRole(userId, newRole)
+      toast.success(`Role updated to ${newRole.replace('_', ' ')}`)
+      loadData() // Refresh data
+    } catch (error) {
+      console.error('Error updating role:', error)
+      toast.error('Failed to update user role')
+    } finally {
+      setChangingRole(null)
+    }
+  }
+
   const getInstallers = () => users.filter(user => user.role === 'installer')
+  
+  const getNonManagers = () => users.filter(user => user.role !== 'manager')
   
   const getUserAssignments = (userId: string) => 
     assignments.filter(assignment => assignment.user_id === userId)
+
+  const toggleSiteSelection = (siteId: string) => {
+    setSelectedSites(prev => 
+      prev.includes(siteId) 
+        ? prev.filter(id => id !== siteId)
+        : [...prev, siteId]
+    )
+  }
+
+  const clearSiteSelection = () => {
+    setSelectedSites([])
+  }
 
   if (loading) {
     return (
@@ -119,50 +154,82 @@ export default function ManagerDashboard() {
             <h2 className="text-lg font-semibold text-gray-900">Assign User to Site</h2>
           </div>
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Installer
+                Select User
               </label>
               <select
                 value={selectedUser}
                 onChange={(e) => setSelectedUser(e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="">Choose installer...</option>
-                {getInstallers().map(user => (
+                <option value="">Choose user...</option>
+                {getNonManagers().map(user => (
                   <option key={user.id} value={user.id}>
-                    {user.full_name || user.email}
+                    {user.full_name || user.email} ({user.role.replace('_', ' ')})
                   </option>
                 ))}
               </select>
             </div>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Site
-              </label>
-              <select
-                value={selectedSite}
-                onChange={(e) => setSelectedSite(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">Choose site...</option>
-                {sites.map(site => (
-                  <option key={site.id} value={site.id}>
-                    {site.name}{site.location ? ` - ${site.location}` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  Select Sites ({selectedSites.length} selected)
+                </label>
+                {selectedSites.length > 0 && (
+                  <button
+                    onClick={clearSiteSelection}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+              <div className="border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
+                {sites.length === 0 ? (
+                  <div className="p-3 text-gray-500 text-sm">No sites available</div>
+                ) : (
+                  sites.map(site => (
+                    <div 
+                      key={site.id}
+                      className="flex items-center p-3 hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
+                    >
+                      <button
+                        onClick={() => toggleSiteSelection(site.id)}
+                        className="flex items-center gap-3 flex-1 text-left"
+                      >
+                        {selectedSites.includes(site.id) ? (
+                          <CheckSquare className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                        ) : (
+                          <Square className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 truncate">
+                            {site.name}
+                          </div>
+                          {site.location && (
+                            <div className="text-sm text-gray-500 truncate">
+                              {site.location}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
             
-            <div className="flex items-end">
+            <div className="flex flex-col gap-2">
+              <div className="flex-1"></div>
               <button
                 onClick={handleAssignUser}
-                disabled={!selectedUser || !selectedSite}
+                disabled={!selectedUser || selectedSites.length === 0}
                 className="w-full bg-blue-600 text-white p-3 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium"
               >
-                Assign User
+                Assign to {selectedSites.length} Site{selectedSites.length !== 1 ? 's' : ''}
               </button>
             </div>
           </div>
@@ -176,7 +243,7 @@ export default function ManagerDashboard() {
           </div>
           
           <div className="space-y-4">
-            {getInstallers().map(user => {
+            {getNonManagers().map(user => {
               const userAssignments = getUserAssignments(user.id)
               
               return (
@@ -190,9 +257,21 @@ export default function ManagerDashboard() {
                         {userAssignments.length} site{userAssignments.length !== 1 ? 's' : ''} assigned
                       </p>
                     </div>
-                    <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
-                      Installer
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {changingRole === user.id ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600" />
+                      ) : (
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value as 'installer' | 'project_manager')}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          disabled={changingRole !== null}
+                        >
+                          <option value="installer">Installer</option>
+                          <option value="project_manager">Project Manager</option>
+                        </select>
+                      )}
+                    </div>
                   </div>
                   
                   {userAssignments.length > 0 ? (
@@ -238,9 +317,9 @@ export default function ManagerDashboard() {
               <Users className="h-8 w-8 text-blue-600" />
               <div>
                 <p className="text-2xl font-bold text-gray-900">
-                  {getInstallers().length}
+                  {users.length}
                 </p>
-                <p className="text-sm text-gray-500">Total Installers</p>
+                <p className="text-sm text-gray-500">Total Users</p>
               </div>
             </div>
           </div>

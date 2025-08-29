@@ -87,12 +87,14 @@ class OfflineStorage {
     const transaction = this.db.transaction([SIGNS_STORE], 'readwrite')
     const store = transaction.objectStore(SIGNS_STORE)
 
-    const key = `${siteId}`
+    // Use a composite key that includes both site and area
+    const key = areaId ? `${siteId}_${areaId}` : `${siteId}_ALL`
     
     await new Promise<void>((resolve, reject) => {
       const request = store.put({ 
         id: key, 
-        siteId, 
+        siteId,
+        areaId: areaId || 'ALL',
         signs, 
         cachedAt: Date.now() 
       })
@@ -101,11 +103,12 @@ class OfflineStorage {
     })
   }
 
-  async getCachedSignCatalog(siteId: string): Promise<ProjectSignCatalog[] | null> {
+  async getCachedSignCatalog(siteId: string, areaId?: string): Promise<ProjectSignCatalog[] | null> {
     await this.init()
     if (!this.db) return null
 
-    const key = `${siteId}`
+    // Use a composite key that includes both site and area
+    const key = areaId ? `${siteId}_${areaId}` : `${siteId}_ALL`
     
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([SIGNS_STORE], 'readonly')
@@ -409,9 +412,32 @@ class OfflineStorage {
     await this.init()
     if (!this.db) return false
     
-    const cachedSigns = await this.getCachedSignCatalog(siteId)
+    const cachedSigns = await this.getCachedSignCatalog(siteId, areaId)
     
     return cachedSigns !== null && cachedSigns.length > 0
+  }
+
+  // Get list of downloaded areas for a site
+  async getDownloadedAreas(siteId: string): Promise<string[]> {
+    await this.init()
+    if (!this.db) return []
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([SIGNS_STORE], 'readonly')
+      const store = transaction.objectStore(SIGNS_STORE)
+      const index = store.index('site_id')
+      const request = index.getAll(siteId)
+
+      request.onsuccess = () => {
+        const results = request.result || []
+        // Extract area IDs from the stored records
+        const areaIds = results
+          .filter(r => r.areaId && r.areaId !== 'ALL')
+          .map(r => r.areaId)
+        resolve(areaIds)
+      }
+      request.onerror = () => reject(request.error)
+    })
   }
 }
 

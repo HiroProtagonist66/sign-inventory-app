@@ -13,6 +13,7 @@ export default function AreaSelection() {
   const [loading, setLoading] = useState(true)
   const [downloadedAreas, setDownloadedAreas] = useState<Set<string>>(new Set())
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [allAreasDownloaded, setAllAreasDownloaded] = useState(false)
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
@@ -36,8 +37,21 @@ export default function AreaSelection() {
       if (!isOnline) {
         const cachedAreas = await offlineStorage.getCachedAreas(siteId)
         if (cachedAreas.length > 0) {
-          data = cachedAreas
-          toast.success('Loading areas from offline cache')
+          // When offline, only show areas that have been downloaded
+          const downloadedAreasList: ProjectArea[] = []
+          for (const area of cachedAreas) {
+            const isDownloaded = await offlineStorage.isAreaDownloaded(siteId, area.id)
+            if (isDownloaded) {
+              downloadedAreasList.push(area)
+            }
+          }
+          
+          if (downloadedAreasList.length > 0) {
+            data = downloadedAreasList
+            toast.success(`Loading ${downloadedAreasList.length} downloaded area${downloadedAreasList.length > 1 ? 's' : ''} from offline cache`)
+          } else {
+            toast.error('No offline areas available. Please download areas when online.')
+          }
         } else {
           toast.error('No offline data available. Please download areas when online.')
         }
@@ -61,6 +75,10 @@ export default function AreaSelection() {
         }
       }
       setDownloadedAreas(downloaded)
+      
+      // Check if "All Areas" is downloaded
+      const allDownloaded = await offlineStorage.isAreaDownloaded(siteId, undefined)
+      setAllAreasDownloaded(allDownloaded)
     } catch (error) {
       console.error('Error loading areas:', error)
       toast.error('Failed to load areas')
@@ -91,6 +109,35 @@ export default function AreaSelection() {
     } catch (error) {
       console.error('Error downloading area:', error)
       toast.error('Failed to download area for offline use')
+    } finally {
+      setDownloading(null)
+    }
+  }
+
+  async function downloadAllAreasForOffline() {
+    if (!selectedSite || !isOnline) return
+    
+    setDownloading('ALL')
+    try {
+      // Fetch all signs for all areas
+      const signs = await getProjectSignCatalog(selectedSite.id, undefined)
+      
+      // Cache the signs with no specific area
+      await offlineStorage.cacheSignCatalog(selectedSite.id, undefined, signs)
+      
+      // Cache the site
+      await offlineStorage.cacheSite({
+        id: selectedSite.id,
+        name: selectedSite.name,
+        location: selectedSite.location,
+        created_at: selectedSite.created_at
+      })
+      
+      setAllAreasDownloaded(true)
+      toast.success(`Downloaded all areas for offline use (${signs.length} signs)`)
+    } catch (error) {
+      console.error('Error downloading all areas:', error)
+      toast.error('Failed to download all areas for offline use')
     } finally {
       setDownloading(null)
     }
@@ -152,20 +199,49 @@ export default function AreaSelection() {
       </div>
 
       <div className="max-w-md mx-auto px-4 py-6">
-        <button
-          onClick={handleAllAreasSelect}
-          className="w-full bg-blue-600 text-white rounded-lg p-4 text-left hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mb-4"
-        >
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h3 className="font-medium">All Areas</h3>
-              <p className="text-sm text-blue-100 mt-1">
-                Inventory all signs across all areas
-              </p>
+        <div className="relative">
+          <button
+            onClick={handleAllAreasSelect}
+            className="w-full bg-blue-600 text-white rounded-lg p-4 text-left hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 mb-4"
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex-1">
+                <h3 className="font-medium">All Areas</h3>
+                <p className="text-sm text-blue-100 mt-1">
+                  Inventory all signs across all areas
+                </p>
+                {allAreasDownloaded && (
+                  <span className="inline-flex items-center gap-1 text-xs text-green-200 mt-1">
+                    <CheckCircle className="h-3 w-3" />
+                    Available offline
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {isOnline && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      downloadAllAreasForOffline()
+                    }}
+                    disabled={downloading === 'ALL' || allAreasDownloaded}
+                    className="p-2 rounded-lg hover:bg-blue-800 transition-colors disabled:opacity-50"
+                    title={allAreasDownloaded ? 'Already downloaded' : 'Download for offline use'}
+                  >
+                    {downloading === 'ALL' ? (
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white" />
+                    ) : allAreasDownloaded ? (
+                      <CheckCircle className="h-5 w-5 text-green-300" />
+                    ) : (
+                      <Download className="h-5 w-5 text-white" />
+                    )}
+                  </button>
+                )}
+                <Building2 className="h-5 w-5 text-blue-100 flex-shrink-0" />
+              </div>
             </div>
-            <Building2 className="h-5 w-5 text-blue-100 ml-3 flex-shrink-0" />
-          </div>
-        </button>
+          </button>
+        </div>
 
         {areas.length === 0 ? (
           <div className="text-center py-12">
