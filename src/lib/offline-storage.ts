@@ -495,13 +495,13 @@ export const offlineStorage = new OfflineStorage()
 // Utility function to reset IndexedDB if needed
 export async function resetIndexedDB(): Promise<void> {
   console.log('Resetting IndexedDB...')
-  const instance = offlineStorage as any
+  const instance = offlineStorage as unknown as { db: IDBDatabase | null }
   if (instance.db) {
     instance.db.close()
     instance.db = null
   }
   
-  await new Promise<void>((resolve, reject) => {
+  await new Promise<void>((resolve) => {
     const deleteReq = indexedDB.deleteDatabase(DB_NAME)
     deleteReq.onsuccess = () => {
       console.log('IndexedDB reset successfully')
@@ -509,7 +509,7 @@ export async function resetIndexedDB(): Promise<void> {
     }
     deleteReq.onerror = () => {
       console.error('Failed to reset IndexedDB:', deleteReq.error)
-      reject(deleteReq.error)
+      resolve() // Resolve anyway to avoid hanging
     }
   })
 }

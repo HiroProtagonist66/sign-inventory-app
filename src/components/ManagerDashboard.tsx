@@ -96,8 +96,6 @@ export default function ManagerDashboard() {
     }
   }
 
-  const getInstallers = () => users.filter(user => user.role === 'installer')
-  
   const getNonManagers = () => users.filter(user => user.role !== 'manager')
   
   const getUserAssignments = (userId: string) => 

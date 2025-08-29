@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { AlertCircle, RefreshCw } from 'lucide-react'
 import { resetIndexedDB } from '@/lib/offline-storage'
 import toast from 'react-hot-toast'
@@ -63,7 +63,7 @@ export default function IndexedDBError({ error }: { error?: Error }) {
         </button>
         
         <p className="text-xs text-gray-500 mt-4">
-          Note: This will clear all offline data. You'll need to download areas again for offline use.
+          Note: This will clear all offline data. You&apos;ll need to download areas again for offline use.
         </p>
       </div>
     </div>
