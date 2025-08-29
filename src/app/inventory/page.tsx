@@ -50,6 +50,7 @@ export default function InventoryChecklist() {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [lastConnectionStatus, setLastConnectionStatus] = useState<boolean | null>(null)
   const [dbError, setDbError] = useState<Error | null>(null)
+  const [isLoadingData, setIsLoadingData] = useState(false)
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
@@ -110,12 +111,12 @@ export default function InventoryChecklist() {
   // Load sign types from sessionStorage on mount as fallback
   useEffect(() => {
     const storedTypes = sessionStorage.getItem('signTypes')
-    if (storedTypes && signTypes.length === 0) {
+    if (storedTypes) {
       const parsed = JSON.parse(storedTypes)
       console.log('Loading sign types from sessionStorage:', parsed.length)
       setSignTypes(parsed)
     }
-  }, [])
+  }, []) // Only run once on mount
 
   // Filter signs when sign type filter or search query changes
   useEffect(() => {
@@ -148,6 +149,13 @@ export default function InventoryChecklist() {
   }, [signs, selectedSignType, signTypes, searchQuery])
 
   const loadSigns = useCallback(async (siteId: string, areaName?: string, sortBy?: 'sign_number' | 'sign_type_code' | 'description') => {
+    // Prevent multiple simultaneous loads
+    if (isLoadingData) {
+      console.log('Already loading data, skipping...')
+      return
+    }
+    
+    setIsLoadingData(true)
     try {
       let signsData: ProjectSignCatalog[] = []
       
@@ -195,8 +203,9 @@ export default function InventoryChecklist() {
       }
     } finally {
       setLoading(false)
+      setIsLoadingData(false)
     }
-  }, [isOnline, selectedArea])
+  }, [isOnline, selectedArea, isLoadingData])
 
   // Save current inventory state to IndexedDB
   const saveInventoryToIndexedDB = useCallback(async (updatedSigns: SignWithStatus[]) => {
@@ -286,7 +295,7 @@ export default function InventoryChecklist() {
   useEffect(() => {
     initializeInventory()
     updateQueuedCount()
-  }, [initializeInventory])
+  }, []) // Only run once on mount, not when initializeInventory changes
 
   useEffect(() => {
     updateQueuedCount()
