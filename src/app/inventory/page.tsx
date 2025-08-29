@@ -9,8 +9,7 @@ import {
   ProjectSignCatalog, 
   Site, 
   ProjectArea,
-  InventoryLogRecord,
-  supabase
+  InventoryLogRecord
 } from '@/lib/supabase'
 import { useOnlineStatus, offlineStorage, ActiveInventorySession } from '@/lib/offline-storage'
 import { 
@@ -47,7 +46,6 @@ export default function InventoryChecklist() {
   const [selectedSignType, setSelectedSignType] = useState<string>('all')
   const [filteredSigns, setFilteredSigns] = useState<SignWithStatus[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
-  const [showConnectionAlert, setShowConnectionAlert] = useState(false)
   const [lastConnectionStatus, setLastConnectionStatus] = useState<boolean | null>(null)
   const router = useRouter()
   const isOnline = useOnlineStatus()
@@ -55,8 +53,6 @@ export default function InventoryChecklist() {
   // Monitor connection status changes
   useEffect(() => {
     if (lastConnectionStatus !== null && lastConnectionStatus !== isOnline) {
-      setShowConnectionAlert(true)
-      
       if (isOnline) {
         toast.success('Back online! Your changes will be synced.', {
           duration: 4000,
@@ -68,13 +64,6 @@ export default function InventoryChecklist() {
           icon: '📡'
         })
       }
-      
-      // Hide alert after 5 seconds
-      const timer = setTimeout(() => {
-        setShowConnectionAlert(false)
-      }, 5000)
-      
-      return () => clearTimeout(timer)
     }
     setLastConnectionStatus(isOnline)
   }, [isOnline, lastConnectionStatus])
@@ -201,7 +190,7 @@ export default function InventoryChecklist() {
     const session: ActiveInventorySession = {
       id: sessionId,
       site_id: selectedSite.id,
-      site_name: (selectedSite as any).site_name || selectedSite.id,
+      site_name: 'site_name' in selectedSite ? (selectedSite as Site & {site_name: string}).site_name : selectedSite.id,
       area_id: selectedArea?.id,
       area_name: selectedArea?.area_name,
       signs: updatedSigns.map(sign => ({
@@ -240,7 +229,6 @@ export default function InventoryChecklist() {
     setSelectedArea(area)
 
     // Check for saved inventory session in IndexedDB
-    const sessionId = area ? `${site.id}_${area.id}` : site.id
     const savedSession = await offlineStorage.getActiveInventory(site.id, area?.id)
     
     if (savedSession && savedSession.signs.length > 0) {
