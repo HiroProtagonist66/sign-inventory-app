@@ -1,4 +1,4 @@
-import { ProjectSignCatalog, InventoryLogRecord, createInventoryLogRecords } from './supabase'
+import { ProjectSignCatalog, InventoryLogRecord, createInventoryLogRecords, Site, ProjectArea } from './supabase'
 
 const DB_NAME = 'SignInventoryDB'
 const DB_VERSION = 3  // Increment version for new stores
@@ -309,7 +309,7 @@ class OfflineStorage {
   }
 
   // Cache site data for offline access
-  async cacheSite(site: any): Promise<void> {
+  async cacheSite(site: Site & { site_name?: string }): Promise<void> {
     await this.init()
     if (!this.db) throw new Error('Database not initialized')
 
@@ -326,7 +326,7 @@ class OfflineStorage {
     })
   }
 
-  async getCachedSites(): Promise<any[]> {
+  async getCachedSites(): Promise<Site[]> {
     await this.init()
     if (!this.db) return []
 
@@ -341,7 +341,7 @@ class OfflineStorage {
   }
 
   // Cache areas for a site
-  async cacheAreas(siteId: string, areas: any[]): Promise<void> {
+  async cacheAreas(siteId: string, areas: ProjectArea[]): Promise<void> {
     await this.init()
     if (!this.db) throw new Error('Database not initialized')
 
@@ -361,7 +361,7 @@ class OfflineStorage {
     await Promise.all(promises)
   }
 
-  async getCachedAreas(siteId: string): Promise<any[]> {
+  async getCachedAreas(siteId: string): Promise<ProjectArea[]> {
     await this.init()
     if (!this.db) return []
 
@@ -380,11 +380,23 @@ class OfflineStorage {
   async downloadAreaForOffline(siteId: string, siteName: string, areaId: string, areaName: string, signs: ProjectSignCatalog[]): Promise<void> {
     await this.init()
     
-    // Cache the site
-    await this.cacheSite({ id: siteId, site_name: siteName })
+    // Cache the site with proper type
+    const siteData: Site & { site_name?: string } = {
+      id: siteId,
+      name: siteName,
+      created_at: new Date().toISOString(),
+      site_name: siteName
+    }
+    await this.cacheSite(siteData)
     
-    // Cache the area
-    await this.cacheAreas(siteId, [{ id: areaId, area_name: areaName, site_id: siteId }])
+    // Cache the area with proper type
+    const areaData: ProjectArea = {
+      id: areaId,
+      area_name: areaName,
+      site_id: siteId,
+      created_at: new Date().toISOString()
+    }
+    await this.cacheAreas(siteId, [areaData])
     
     // Cache the signs
     await this.cacheSignCatalog(siteId, areaId, signs)
@@ -397,7 +409,6 @@ class OfflineStorage {
     await this.init()
     if (!this.db) return false
     
-    const key = areaId ? `${siteId}_${areaId}` : siteId
     const cachedSigns = await this.getCachedSignCatalog(siteId)
     
     return cachedSigns !== null && cachedSigns.length > 0

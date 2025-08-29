@@ -80,7 +80,7 @@ export default function AreaSelection() {
       // Download and cache everything
       await offlineStorage.downloadAreaForOffline(
         selectedSite.id,
-        (selectedSite as any).site_name || selectedSite.id,
+        selectedSite.name || selectedSite.id,
         area.id,
         area.area_name,
         signs
