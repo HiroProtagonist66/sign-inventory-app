@@ -1,7 +1,7 @@
 import { ProjectSignCatalog, InventoryLogRecord, createInventoryLogRecords, Site, ProjectArea } from './supabase'
 
 const DB_NAME = 'SignInventoryDB'
-const DB_VERSION = 3  // Increment version for new stores
+const DB_VERSION = 4  // Increment version to force migration
 const SIGNS_STORE = 'signs'
 const QUEUE_STORE = 'syncQueue'
 const ACTIVE_INVENTORY_STORE = 'activeInventory'
@@ -41,43 +41,85 @@ class OfflineStorage {
     if (this.db) return
 
     return new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION)
+      try {
+        const request = indexedDB.open(DB_NAME, DB_VERSION)
 
-      request.onerror = () => reject(request.error)
-      request.onsuccess = () => {
-        this.db = request.result
-        resolve()
-      }
-
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result
-
-        if (!db.objectStoreNames.contains(SIGNS_STORE)) {
-          const signsStore = db.createObjectStore(SIGNS_STORE, { keyPath: 'id' })
-          signsStore.createIndex('site_id', 'site_id', { unique: false })
-          signsStore.createIndex('area_id', 'area_id', { unique: false })
+        request.onerror = () => {
+          console.error('IndexedDB error:', request.error)
+          // If there's a version error, try to delete and recreate
+          if (request.error?.name === 'VersionError') {
+            this.deleteAndRecreateDB().then(resolve).catch(reject)
+          } else {
+            reject(request.error)
+          }
+        }
+        
+        request.onsuccess = () => {
+          this.db = request.result
+          resolve()
         }
 
-        if (!db.objectStoreNames.contains(QUEUE_STORE)) {
-          db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
-        }
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result
+          const oldVersion = event.oldVersion
+          
+          console.log(`Upgrading IndexedDB from version ${oldVersion} to ${DB_VERSION}`)
 
-        if (!db.objectStoreNames.contains(ACTIVE_INVENTORY_STORE)) {
-          const activeStore = db.createObjectStore(ACTIVE_INVENTORY_STORE, { keyPath: 'id' })
-          activeStore.createIndex('site_id', 'site_id', { unique: false })
-          activeStore.createIndex('lastModified', 'lastModified', { unique: false })
-        }
+          // Delete old stores if they exist with wrong structure
+          if (oldVersion < 4 && db.objectStoreNames.contains(SIGNS_STORE)) {
+            db.deleteObjectStore(SIGNS_STORE)
+          }
 
-        if (!db.objectStoreNames.contains(AREAS_STORE)) {
-          const areasStore = db.createObjectStore(AREAS_STORE, { keyPath: 'id' })
-          areasStore.createIndex('site_id', 'site_id', { unique: false })
-        }
+          if (!db.objectStoreNames.contains(SIGNS_STORE)) {
+            const signsStore = db.createObjectStore(SIGNS_STORE, { keyPath: 'id' })
+            signsStore.createIndex('site_id', 'siteId', { unique: false })
+            signsStore.createIndex('area_id', 'areaId', { unique: false })
+          }
 
-        if (!db.objectStoreNames.contains(SITES_STORE)) {
-          db.createObjectStore(SITES_STORE, { keyPath: 'id' })
+          if (!db.objectStoreNames.contains(QUEUE_STORE)) {
+            db.createObjectStore(QUEUE_STORE, { keyPath: 'id', autoIncrement: true })
+          }
+
+          if (!db.objectStoreNames.contains(ACTIVE_INVENTORY_STORE)) {
+            const activeStore = db.createObjectStore(ACTIVE_INVENTORY_STORE, { keyPath: 'id' })
+            activeStore.createIndex('site_id', 'site_id', { unique: false })
+            activeStore.createIndex('lastModified', 'lastModified', { unique: false })
+          }
+
+          if (!db.objectStoreNames.contains(AREAS_STORE)) {
+            const areasStore = db.createObjectStore(AREAS_STORE, { keyPath: 'id' })
+            areasStore.createIndex('site_id', 'site_id', { unique: false })
+          }
+
+          if (!db.objectStoreNames.contains(SITES_STORE)) {
+            db.createObjectStore(SITES_STORE, { keyPath: 'id' })
+          }
         }
+      } catch (error) {
+        console.error('Failed to initialize IndexedDB:', error)
+        reject(error)
       }
     })
+  }
+
+  async deleteAndRecreateDB(): Promise<void> {
+    console.log('Deleting and recreating IndexedDB due to version mismatch')
+    
+    // Close existing connection
+    if (this.db) {
+      this.db.close()
+      this.db = null
+    }
+    
+    // Delete the database
+    await new Promise<void>((resolve, reject) => {
+      const deleteReq = indexedDB.deleteDatabase(DB_NAME)
+      deleteReq.onsuccess = () => resolve()
+      deleteReq.onerror = () => reject(deleteReq.error)
+    })
+    
+    // Reinitialize
+    await this.init()
   }
 
   async cacheSignCatalog(siteId: string, areaId: string | undefined, signs: ProjectSignCatalog[]): Promise<void> {
@@ -423,25 +465,54 @@ class OfflineStorage {
     if (!this.db) return []
 
     return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction([SIGNS_STORE], 'readonly')
-      const store = transaction.objectStore(SIGNS_STORE)
-      const index = store.index('site_id')
-      const request = index.getAll(siteId)
+      try {
+        const transaction = this.db!.transaction([SIGNS_STORE], 'readonly')
+        const store = transaction.objectStore(SIGNS_STORE)
+        const request = store.getAll()
 
-      request.onsuccess = () => {
-        const results = request.result || []
-        // Extract area IDs from the stored records
-        const areaIds = results
-          .filter(r => r.areaId && r.areaId !== 'ALL')
-          .map(r => r.areaId)
-        resolve(areaIds)
+        request.onsuccess = () => {
+          const results = request.result || []
+          // Filter by siteId and extract area IDs
+          const areaIds = results
+            .filter(r => r.siteId === siteId && r.areaId && r.areaId !== 'ALL')
+            .map(r => r.areaId)
+          resolve(areaIds)
+        }
+        request.onerror = () => {
+          console.error('Error getting downloaded areas:', request.error)
+          resolve([]) // Return empty array on error
+        }
+      } catch (error) {
+        console.error('Error in getDownloadedAreas:', error)
+        resolve([]) // Return empty array on error
       }
-      request.onerror = () => reject(request.error)
     })
   }
 }
 
 export const offlineStorage = new OfflineStorage()
+
+// Utility function to reset IndexedDB if needed
+export async function resetIndexedDB(): Promise<void> {
+  console.log('Resetting IndexedDB...')
+  const instance = offlineStorage as any
+  if (instance.db) {
+    instance.db.close()
+    instance.db = null
+  }
+  
+  await new Promise<void>((resolve, reject) => {
+    const deleteReq = indexedDB.deleteDatabase(DB_NAME)
+    deleteReq.onsuccess = () => {
+      console.log('IndexedDB reset successfully')
+      resolve()
+    }
+    deleteReq.onerror = () => {
+      console.error('Failed to reset IndexedDB:', deleteReq.error)
+      reject(deleteReq.error)
+    }
+  })
+}
 
 export function useOnlineStatus() {
   const [isOnline, setIsOnline] = React.useState(

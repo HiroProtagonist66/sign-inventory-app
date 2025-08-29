@@ -12,6 +12,7 @@ import {
   InventoryLogRecord
 } from '@/lib/supabase'
 import { useOnlineStatus, offlineStorage, ActiveInventorySession } from '@/lib/offline-storage'
+import IndexedDBError from '@/components/IndexedDBError'
 import { 
   ArrowLeft, 
   Wifi, 
@@ -47,6 +48,7 @@ export default function InventoryChecklist() {
   const [filteredSigns, setFilteredSigns] = useState<SignWithStatus[]>([])
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [lastConnectionStatus, setLastConnectionStatus] = useState<boolean | null>(null)
+  const [dbError, setDbError] = useState<Error | null>(null)
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
@@ -180,7 +182,16 @@ export default function InventoryChecklist() {
       setSigns(signsWithStatus)
     } catch (error) {
       console.error('Error loading signs:', error)
-      toast.error('Failed to load signs')
+      
+      // Check if it's an IndexedDB error
+      if (error instanceof Error && 
+          (error.name === 'VersionError' || 
+           error.message.includes('version') ||
+           error.message.includes('IndexedDB'))) {
+        setDbError(error)
+      } else {
+        toast.error('Failed to load signs')
+      }
     } finally {
       setLoading(false)
     }
@@ -456,6 +467,11 @@ export default function InventoryChecklist() {
   }
 
   const recordedCount = signs.filter(sign => sign.status !== null).length
+
+  // Show database error screen if there's an IndexedDB issue
+  if (dbError) {
+    return <IndexedDBError error={dbError} />
+  }
 
   if (loading) {
     return (
