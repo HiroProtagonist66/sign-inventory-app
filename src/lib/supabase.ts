@@ -259,7 +259,7 @@ export async function getAllUsers(): Promise<UserProfile[]> {
   return data as UserProfile[]
 }
 
-export async function updateUserRole(userId: string, role: 'manager' | 'installer'): Promise<void> {
+export async function updateUserRole(userId: string, role: 'manager' | 'installer' | 'project_manager'): Promise<void> {
   const { error } = await supabase
     .from('user_profiles')
     .update({ role, updated_at: new Date().toISOString() })
