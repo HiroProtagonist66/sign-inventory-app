@@ -684,7 +684,7 @@ export default function InventoryChecklist() {
                     </div>
                     
                     {/* Quick status toggle buttons */}
-                    <div className="flex gap-1 mt-2">
+                    <div className="flex gap-1 mt-2 flex-wrap">
                       <button
                         onClick={() => updateSingleSignStatus(sign.id, 'present')}
                         className={`px-2 py-1 text-xs rounded-full transition-colors ${
@@ -718,6 +718,15 @@ export default function InventoryChecklist() {
                         <AlertCircle className="h-3 w-3 inline mr-1" />
                         Damaged
                       </button>
+                      {sign.status !== null && (
+                        <button
+                          onClick={() => updateSingleSignStatus(sign.id, null)}
+                          className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700 hover:bg-gray-300 transition-colors"
+                        >
+                          <X className="h-3 w-3 inline mr-1" />
+                          Clear
+                        </button>
+                      )}
                     </div>
                   </div>
 

@@ -1,10 +1,12 @@
 import { ProjectSignCatalog, InventoryLogRecord, createInventoryLogRecords } from './supabase'
 
 const DB_NAME = 'SignInventoryDB'
-const DB_VERSION = 2  // Increment version for new store
+const DB_VERSION = 3  // Increment version for new stores
 const SIGNS_STORE = 'signs'
 const QUEUE_STORE = 'syncQueue'
 const ACTIVE_INVENTORY_STORE = 'activeInventory'
+const AREAS_STORE = 'areas'
+const SITES_STORE = 'sites'
 
 interface QueueItem {
   id?: number
@@ -64,6 +66,15 @@ class OfflineStorage {
           const activeStore = db.createObjectStore(ACTIVE_INVENTORY_STORE, { keyPath: 'id' })
           activeStore.createIndex('site_id', 'site_id', { unique: false })
           activeStore.createIndex('lastModified', 'lastModified', { unique: false })
+        }
+
+        if (!db.objectStoreNames.contains(AREAS_STORE)) {
+          const areasStore = db.createObjectStore(AREAS_STORE, { keyPath: 'id' })
+          areasStore.createIndex('site_id', 'site_id', { unique: false })
+        }
+
+        if (!db.objectStoreNames.contains(SITES_STORE)) {
+          db.createObjectStore(SITES_STORE, { keyPath: 'id' })
         }
       }
     })
@@ -295,6 +306,101 @@ class OfflineStorage {
       request.onsuccess = () => resolve(request.result)
       request.onerror = () => reject(request.error)
     })
+  }
+
+  // Cache site data for offline access
+  async cacheSite(site: any): Promise<void> {
+    await this.init()
+    if (!this.db) throw new Error('Database not initialized')
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([SITES_STORE], 'readwrite')
+      const store = transaction.objectStore(SITES_STORE)
+      const request = store.put({
+        ...site,
+        cachedAt: Date.now()
+      })
+
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  async getCachedSites(): Promise<any[]> {
+    await this.init()
+    if (!this.db) return []
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([SITES_STORE], 'readonly')
+      const store = transaction.objectStore(SITES_STORE)
+      const request = store.getAll()
+
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  // Cache areas for a site
+  async cacheAreas(siteId: string, areas: any[]): Promise<void> {
+    await this.init()
+    if (!this.db) throw new Error('Database not initialized')
+
+    const transaction = this.db.transaction([AREAS_STORE], 'readwrite')
+    const store = transaction.objectStore(AREAS_STORE)
+
+    const promises = areas.map(area => new Promise<void>((resolve, reject) => {
+      const request = store.put({
+        ...area,
+        site_id: siteId,
+        cachedAt: Date.now()
+      })
+      request.onsuccess = () => resolve()
+      request.onerror = () => reject(request.error)
+    }))
+
+    await Promise.all(promises)
+  }
+
+  async getCachedAreas(siteId: string): Promise<any[]> {
+    await this.init()
+    if (!this.db) return []
+
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction([AREAS_STORE], 'readonly')
+      const store = transaction.objectStore(AREAS_STORE)
+      const index = store.index('site_id')
+      const request = index.getAll(siteId)
+
+      request.onsuccess = () => resolve(request.result || [])
+      request.onerror = () => reject(request.error)
+    })
+  }
+
+  // Download complete area data for offline use
+  async downloadAreaForOffline(siteId: string, siteName: string, areaId: string, areaName: string, signs: ProjectSignCatalog[]): Promise<void> {
+    await this.init()
+    
+    // Cache the site
+    await this.cacheSite({ id: siteId, site_name: siteName })
+    
+    // Cache the area
+    await this.cacheAreas(siteId, [{ id: areaId, area_name: areaName, site_id: siteId }])
+    
+    // Cache the signs
+    await this.cacheSignCatalog(siteId, areaId, signs)
+    
+    console.log(`Downloaded ${areaName} for offline use with ${signs.length} signs`)
+  }
+
+  // Check if area is downloaded for offline
+  async isAreaDownloaded(siteId: string, areaId?: string): Promise<boolean> {
+    await this.init()
+    if (!this.db) return false
+    
+    const key = areaId ? `${siteId}_${areaId}` : siteId
+    const cachedSigns = await this.getCachedSignCatalog(siteId)
+    
+    return cachedSigns !== null && cachedSigns.length > 0
   }
 }
 

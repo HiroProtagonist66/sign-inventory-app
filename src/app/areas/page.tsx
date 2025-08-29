@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getProjectAreas, ProjectArea, Site } from '@/lib/supabase'
-import { useOnlineStatus } from '@/lib/offline-storage'
-import { ArrowLeft, MapPin, Wifi, WifiOff, Building2 } from 'lucide-react'
+import { getProjectAreas, getProjectSignCatalog, ProjectArea, Site } from '@/lib/supabase'
+import { useOnlineStatus, offlineStorage } from '@/lib/offline-storage'
+import { ArrowLeft, MapPin, Wifi, WifiOff, Building2, Download, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function AreaSelection() {
   const [areas, setAreas] = useState<ProjectArea[]>([])
   const [selectedSite, setSelectedSite] = useState<Site | null>(null)
   const [loading, setLoading] = useState(true)
+  const [downloadedAreas, setDownloadedAreas] = useState<Set<string>>(new Set())
+  const [downloading, setDownloading] = useState<string | null>(null)
   const router = useRouter()
   const isOnline = useOnlineStatus()
 
@@ -24,17 +26,73 @@ export default function AreaSelection() {
     const site = JSON.parse(siteData)
     setSelectedSite(site)
     loadAreas(site.id)
-  }, [router])
+  }, [router, isOnline]) // Re-run when online status changes
 
   async function loadAreas(siteId: string) {
     try {
-      const data = await getProjectAreas(siteId)
+      let data: ProjectArea[] = []
+      
+      // Try to load from cache first if offline
+      if (!isOnline) {
+        const cachedAreas = await offlineStorage.getCachedAreas(siteId)
+        if (cachedAreas.length > 0) {
+          data = cachedAreas
+          toast.success('Loading areas from offline cache')
+        } else {
+          toast.error('No offline data available. Please download areas when online.')
+        }
+      } else {
+        // Online - fetch fresh data
+        data = await getProjectAreas(siteId)
+        // Cache for future offline use
+        if (data.length > 0) {
+          await offlineStorage.cacheAreas(siteId, data)
+        }
+      }
+      
       setAreas(data)
+      
+      // Check which areas are already downloaded
+      const downloaded = new Set<string>()
+      for (const area of data) {
+        const isDownloaded = await offlineStorage.isAreaDownloaded(siteId, area.id)
+        if (isDownloaded) {
+          downloaded.add(area.id)
+        }
+      }
+      setDownloadedAreas(downloaded)
     } catch (error) {
       console.error('Error loading areas:', error)
       toast.error('Failed to load areas')
     } finally {
       setLoading(false)
+    }
+  }
+  
+  async function downloadAreaForOffline(area: ProjectArea) {
+    if (!selectedSite || !isOnline) return
+    
+    setDownloading(area.id)
+    try {
+      // Fetch all signs for this area
+      const signs = await getProjectSignCatalog(selectedSite.id, area.area_name)
+      
+      // Download and cache everything
+      await offlineStorage.downloadAreaForOffline(
+        selectedSite.id,
+        (selectedSite as any).site_name || selectedSite.id,
+        area.id,
+        area.area_name,
+        signs
+      )
+      
+      setDownloadedAreas(prev => new Set([...prev, area.id]))
+      toast.success(`Downloaded ${area.area_name} for offline use (${signs.length} signs)`)
+    } catch (error) {
+      console.error('Error downloading area:', error)
+      toast.error('Failed to download area for offline use')
+    } finally {
+      setDownloading(null)
     }
   }
 
@@ -120,18 +178,46 @@ export default function AreaSelection() {
           <div className="space-y-3">
             <h2 className="text-sm font-medium text-gray-700 mb-3">Specific Areas</h2>
             {areas.map((area) => (
-              <button
-                key={area.id}
-                onClick={() => handleAreaSelect(area)}
-                className="w-full bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium text-gray-900">{area.area_name}</h3>
+              <div key={area.id} className="relative">
+                <button
+                  onClick={() => handleAreaSelect(area)}
+                  className="w-full bg-white rounded-lg border border-gray-200 p-4 text-left hover:border-blue-300 hover:bg-blue-50 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{area.area_name}</h3>
+                      {downloadedAreas.has(area.id) && (
+                        <span className="inline-flex items-center gap-1 text-xs text-green-600 mt-1">
+                          <CheckCircle className="h-3 w-3" />
+                          Available offline
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {isOnline && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            downloadAreaForOffline(area)
+                          }}
+                          disabled={downloading === area.id || downloadedAreas.has(area.id)}
+                          className="p-2 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
+                          title={downloadedAreas.has(area.id) ? 'Already downloaded' : 'Download for offline use'}
+                        >
+                          {downloading === area.id ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600" />
+                          ) : downloadedAreas.has(area.id) ? (
+                            <CheckCircle className="h-5 w-5 text-green-500" />
+                          ) : (
+                            <Download className="h-5 w-5 text-gray-600" />
+                          )}
+                        </button>
+                      )}
+                      <MapPin className="h-5 w-5 text-gray-400 flex-shrink-0" />
+                    </div>
                   </div>
-                  <MapPin className="h-5 w-5 text-gray-400 ml-3 flex-shrink-0" />
-                </div>
-              </button>
+                </button>
+              </div>
             ))}
           </div>
         )}
